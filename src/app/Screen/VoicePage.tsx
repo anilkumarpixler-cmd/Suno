@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { Text } from '@/components/app-text';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../Context/AppContext';
-import { Header } from '../components/Common/header';
 import { theme } from '../Theme/Index';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,17 +11,25 @@ export const VoicesScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header
-        title="Family Voices"
-        rightElement={
-          <TouchableOpacity
-            style={styles.addBtn}
-            onPress={() => setCurrentScreen('AddVoice')}
-          >
-            <Text style={styles.addIcon}>+</Text>
-          </TouchableOpacity>
-        }
-      />
+      <View style={styles.pageHeader}>
+        <TouchableOpacity
+          accessibilityLabel="Go back"
+          accessibilityRole="button"
+          style={styles.backBtn}
+          onPress={() => setCurrentScreen('Home')}
+        >
+          <Text style={styles.backIcon}>←</Text>
+        </TouchableOpacity>
+        <Text variant="title" style={styles.pageTitle}>Family Voices</Text>
+        <TouchableOpacity
+          accessibilityLabel="Add a family voice"
+          accessibilityRole="button"
+          style={styles.addBtn}
+          onPress={() => setCurrentScreen('AddVoice')}
+        >
+          <Text style={styles.addIcon}>+</Text>
+        </TouchableOpacity>
+      </View>
 
       <ScrollView contentContainerStyle={styles.content}>
         <LinearGradient colors={theme.gradients.hero} style={styles.hero}>
@@ -60,6 +68,15 @@ export const VoicesScreen: React.FC = () => {
             )}
           </View>
         ))}
+
+        <TouchableOpacity
+          accessibilityLabel="Create a family voice"
+          accessibilityRole="button"
+          style={styles.createVoiceButton}
+          onPress={() => setCurrentScreen('AddVoice')}
+        >
+          <Text style={styles.createVoiceText}>+ Add Family Voice</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -67,7 +84,33 @@ export const VoicesScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
-  content: { padding: theme.spacing.md },
+  content: { padding: theme.spacing.md, paddingBottom: theme.spacing.xl },
+  pageHeader: {
+    height: 60,
+    paddingHorizontal: theme.spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  pageTitle: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    color: theme.colors.textDark,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  backIcon: {
+    fontSize: 24,
+    color: theme.colors.textDark,
+    fontWeight: '600',
+  },
   addBtn: {
     width: 32,
     height: 32,
@@ -77,6 +120,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   addIcon: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
+  createVoiceButton: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.button,
+    alignItems: 'center',
+    paddingVertical: theme.spacing.md,
+    marginTop: theme.spacing.md,
+  },
+  createVoiceText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
   hero: {
     borderRadius: theme.borderRadius.card,
     padding: theme.spacing.lg,

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { Text } from '@/components/app-text';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../Context/AppContext';
 import { Header } from '../components/Common/header';
@@ -50,6 +51,14 @@ export const HomeScreen: React.FC = () => {
         {/* Section Header & Pills */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Stories for {child.name}</Text>
+          <TouchableOpacity
+            accessibilityLabel="Create a story"
+            accessibilityRole="button"
+            style={styles.createStoryButton}
+            onPress={() => setCurrentScreen('Create')}
+          >
+            <Text style={styles.createStoryIcon}>+ Create</Text>
+          </TouchableOpacity>
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillsScroll}>
@@ -121,9 +130,24 @@ const styles = StyleSheet.create({
   heroTextContainer: { flex: 1, marginRight: theme.spacing.sm },
   heroTitle: { fontSize: 20, fontWeight: '800', color: theme.colors.textDark, marginBottom: 4 },
   heroSub: { fontSize: 12, color: theme.colors.textMuted, lineHeight: 16 },
-  heroEmoji: { fontSize: 44 },
-  sectionHeader: { marginBottom: theme.spacing.sm },
+  heroEmoji: { fontSize: 49, lineHeight: 60 },
+  sectionHeader: {
+    marginBottom: theme.spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.textDark },
+  createStoryButton: {
+    paddingVertical: theme.spacing.xs,
+    paddingLeft: theme.spacing.sm,
+  },
+  createStoryIcon: {
+    color: theme.colors.primary,
+    fontSize: 21,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
   subSectionTitle: { fontSize: 14, fontWeight: '700', color: theme.colors.textMuted, marginBottom: theme.spacing.sm },
   pillsScroll: { marginBottom: theme.spacing.md },
   pill: {

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { Text } from '@/components/app-text';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../Context/AppContext';
 import { Header } from '../components/Common/header';
@@ -39,7 +40,7 @@ export const NowPlayingScreen: React.FC = () => {
       <Header
         showBack
         onBack={() => setCurrentScreen('Home')}
-        title="Now Playing"
+        title=" Now Playing"
         rightElement={
           <TouchableOpacity onPress={() => toggleFavorite(activeStory.id)}>
             <Text style={styles.heart}>{activeStory.isFavorite ? '❤️' : '🤍'}</Text>

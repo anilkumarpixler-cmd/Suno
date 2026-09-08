@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { Text } from '@/components/app-text';
 import { useApp } from '../Context/AppContext';
 import { Header } from '../components/Common/header';
 import { theme } from '../Theme/Index';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export const AddVoiceScreen: React.FC = () => {
   const { addVoice, setCurrentScreen } = useApp();
@@ -39,8 +41,8 @@ export const AddVoiceScreen: React.FC = () => {
   };
 
   return (
-    <View style={styles.container}>
-      <Header showBack onBack={() => setCurrentScreen('Voices')} title="Add a Voice" />
+    <SafeAreaView style={styles.container}>
+      <Header showBack onBack={() => setCurrentScreen('Voices')} title=" Add a Voice" />
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.formGroup}>
@@ -120,7 +122,7 @@ export const AddVoiceScreen: React.FC = () => {
           </Text>
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 

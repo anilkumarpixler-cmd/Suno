@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { Text } from '@/components/app-text';
 import { useApp } from '../Context/AppContext';
 import { Header } from '../components/Common/header';
 import { Category } from '../Types';
 import { theme } from '../Theme/Index';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export const CreateStoryScreen: React.FC = () => {
   const { createNewStory, voices, setCurrentScreen } = useApp();
@@ -36,7 +38,7 @@ export const CreateStoryScreen: React.FC = () => {
   const defaultVoice = voices.find((v) => v.isDefault) || voices[0];
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <Header title="Create a Story" showBack onBack={() => setCurrentScreen('Home')} />
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -97,7 +99,7 @@ export const CreateStoryScreen: React.FC = () => {
           <Text style={styles.submitText}>Create Story</Text>
         </TouchableOpacity>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 

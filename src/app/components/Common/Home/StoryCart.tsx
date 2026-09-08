@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { Text } from '@/components/app-text';
 import { Story, Voice } from '../../../Types';
 import { theme } from '../../../Theme/Index';
 
@@ -31,15 +32,15 @@ export const StoryCard: React.FC<StoryCardProps> = ({
       </View>
 
       <View style={styles.infoContainer}>
-        <Text style={styles.title} numberOfLines={1}>
+        <Text variant="title" style={styles.title} numberOfLines={1}>
           {story.title}
         </Text>
-        <Text style={styles.description} numberOfLines={2}>
+        <Text variant="caption" style={styles.description} numberOfLines={2}>
           {story.description}
         </Text>
 
         <View style={styles.metaRow}>
-          <Text style={styles.metaText}>
+          <Text variant="caption" style={styles.metaText}>
             {Math.floor(story.duration / 60)} mins • {narrator ? narrator.name : 'Family Voice'}
           </Text>
         </View>

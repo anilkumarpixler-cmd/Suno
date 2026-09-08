@@ -1,4 +1,11 @@
 export const theme = {
+  fonts: {
+    regular: 'Mulish_400Regular',
+    medium: 'Mulish_500Medium',
+    semibold: 'Mulish_600SemiBold',
+    bold: 'Mulish_700Bold',
+    extraBold: 'Mulish_800ExtraBold',
+  },
   colors: {
     background: '#FAF8F5',       // Warm off-white / cream
     primary: '#6C5CE7',          // Vivid purple
