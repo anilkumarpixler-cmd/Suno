@@ -4,12 +4,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../Context/AppContext';
 import { Header } from '../components/Common/header';
 import { theme } from '../Theme/Index';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export const VoicesScreen: React.FC = () => {
   const { voices, setDefaultVoice, setCurrentScreen } = useApp();
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <Header
         title="Family Voices"
         rightElement={
@@ -60,7 +61,7 @@ export const VoicesScreen: React.FC = () => {
           </View>
         ))}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 

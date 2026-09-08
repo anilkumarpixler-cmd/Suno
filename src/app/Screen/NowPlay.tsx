@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../Context/AppContext';
 import { Header } from '../components/Common/header';
 import { theme } from '../Theme/Index';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export const NowPlayingScreen: React.FC = () => {
   const {
@@ -34,7 +35,7 @@ export const NowPlayingScreen: React.FC = () => {
   const progressPct = (currentTime / activeStory.duration) * 100;
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <Header
         showBack
         onBack={() => setCurrentScreen('Home')}
@@ -134,7 +135,7 @@ export const NowPlayingScreen: React.FC = () => {
           )}
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 

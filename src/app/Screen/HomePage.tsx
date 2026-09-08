@@ -6,6 +6,7 @@ import { Header } from '../components/Common/header';
 import { StoryCard } from '../components/Common/Home/StoryCart';
 import { Category } from '../Types';
 import { theme } from '../Theme/Index';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export const HomeScreen: React.FC = () => {
   const { child, stories, voices, playStory, setCurrentScreen } = useApp();
@@ -25,7 +26,7 @@ export const HomeScreen: React.FC = () => {
   const continueStory = stories.find((s) => s.progress > 0);
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <Header
         rightElement={
           <TouchableOpacity style={styles.avatarBtn} onPress={() => setCurrentScreen('Profile')}>
@@ -94,7 +95,7 @@ export const HomeScreen: React.FC = () => {
           ))}
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 
