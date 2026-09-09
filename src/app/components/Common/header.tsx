@@ -15,7 +15,7 @@ export const Header: React.FC<HeaderProps> = ({ title, showBack, onBack, rightEl
     <View style={styles.container}>
       {showBack ? (
         <TouchableOpacity onPress={onBack} style={styles.iconBtn}>
-          <Text style={styles.iconText}>←</Text>
+          <Text style={styles.iconText}>‹</Text>
         </TouchableOpacity>
       ) : (
         <View style={styles.logoContainer}>
@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
     padding: theme.spacing.xs,
   },
   iconText: {
-    fontSize: 22,
+    fontSize: 30,
     color: theme.colors.textDark,
     fontWeight: '600',
   },

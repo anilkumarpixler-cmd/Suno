@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
-import { Text } from '../components/Common/Text';
+import { Text } from '@/components/app-text';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../Context/AppContext';
 import { Header } from '../components/Common/header';
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: theme.spacing.lg,
   },
-  heroTextContainer: { flex: 1, marginRight: theme.spacing.sm },
+  heroTextContainer: { flex: 1, marginRight: theme.spacing.sm},
   heroTitle: { fontSize: 20, fontWeight: '800', color: theme.colors.textDark, marginBottom: 4 },
   heroSub: { fontSize: 12, color: theme.colors.textMuted, lineHeight: 16 },
   heroEmoji: { fontSize: 49, lineHeight: 60 },
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: '700',
   },
-  subSectionTitle: { fontSize: 14, fontWeight: '700', color: theme.colors.textMuted, marginBottom: theme.spacing.sm },
+  subSectionTitle: { fontSize: 24, fontWeight: '700', color: theme.colors.textMuted, marginBottom: theme.spacing.sm },
   pillsScroll: { marginBottom: theme.spacing.md },
   pill: {
     paddingHorizontal: 16,

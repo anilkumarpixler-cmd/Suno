@@ -23,6 +23,7 @@ export interface Story {
   duration: number; // in seconds
   narratorId: string;
   artwork: string;
+  audioUri?: string;
   progress: number; // in seconds
   isFavorite?: boolean;
 }

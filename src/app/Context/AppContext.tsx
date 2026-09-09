@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Story, Voice, Child, RootScreen } from '../Types';
 import { initialChild, initialStories, initialVoices } from '../Data/mockData';
-import { getStories, saveStory, updateStory } from '../../storage';
+import { getStories, saveStory, updateStory, getVoices, saveVoice, updateVoice } from '../../storage';
 
 interface AppContextType {
   currentScreen: RootScreen;
@@ -17,7 +17,7 @@ interface AppContextType {
   seekTo: (time: number) => void;
   skipTime: (seconds: number) => void;
   setDefaultVoice: (voiceId: string) => void;
-  addVoice: (name: string, languages: string[]) => void;
+  addVoice: (name: string, languages: string[]) => Promise<void>;
   toggleFavorite: (storyId: string) => void;
   changeNarrator: (storyId: string, narratorId: string) => void;
   createNewStory: (title: string, category: any, durationMinutes: number, narratorId?: string) => Promise<void>;
@@ -48,6 +48,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const savedIds = new Set(savedStories.map((story) => story.id));
           return [...savedStories, ...currentStories.filter((story) => !savedIds.has(story.id))];
         });
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getVoices().then(async (savedVoices) => {
+      if (!isMounted) return;
+      if (savedVoices.length > 0) {
+        setVoices((currentVoices) => {
+          const currentIds = new Set(currentVoices.map((voice) => voice.id));
+          return [...currentVoices, ...savedVoices.filter((voice) => !currentIds.has(voice.id))];
+        });
+        return;
+      }
+
+      for (const voice of initialVoices) {
+        await saveVoice(voice);
       }
     });
 
@@ -96,21 +119,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const setDefaultVoice = (voiceId: string) => {
+    void updateVoice(voiceId, { isDefault: true });
     setVoices((prev) =>
-      prev.map((v) => ({ ...v, isDefault: v.id === voiceId }))
+      prev.map((voice) => {
+        const isDefault = voice.id === voiceId;
+        if (voice.isDefault && !isDefault) void updateVoice(voice.id, { isDefault: false });
+        return { ...voice, isDefault };
+      })
     );
   };
 
-  const addVoice = (name: string, languages: string[]) => {
+  const addVoice = async (name: string, languages: string[]) => {
     const newVoice: Voice = {
       id: `v_${Date.now()}`,
       name,
       languages,
       status: 'Ready',
       isDefault: false,
-      avatar: '🎙️',
+      avatar: '👨🏽',
     };
-    setVoices((prev) => [...prev, newVoice]);
+    if (await saveVoice(newVoice)) setVoices((prev) => [...prev, newVoice]);
   };
 
   const toggleFavorite = (storyId: string) => {

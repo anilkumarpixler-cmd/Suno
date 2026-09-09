@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Text } from '../components/Common/Text';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -6,6 +6,26 @@ import { useApp } from '../Context/AppContext';
 import { Header } from '../components/Common/header';
 import { theme } from '../Theme/Index';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AudioPlayer } from '../components/Common/AudioPlayer';
+
+interface NarratorCardProps {
+  avatar: string;
+}
+
+export const NarratorCard: React.FC<NarratorCardProps> = ({ avatar }) => (
+  <View style={styles.narratorCard}>
+    <View style={styles.narratorAvatarCircle}>
+      <Text style={styles.avatar}>{avatar}</Text>
+    </View>
+    <View style={styles.narratorDetails}>
+      <Text style={styles.narratorName}>Mummy</Text>
+      <Text style={styles.languages}>Hindi · My voice</Text>
+    </View>
+    <View style={styles.selectedIndicator} accessibilityLabel="Mummy selected">
+      <Text style={styles.check}>✓</Text>
+    </View>
+  </View>
+);
 
 export const NowPlayingScreen: React.FC = () => {
   const {
@@ -17,15 +37,12 @@ export const NowPlayingScreen: React.FC = () => {
     skipTime,
     toggleFavorite,
     voices,
-    changeNarrator,
     setCurrentScreen,
   } = useApp();
 
-  const [showNarratorPicker, setShowNarratorPicker] = useState(false);
-
   if (!activeStory) return null;
 
-  const narrator = voices.find((v) => v.id === activeStory.narratorId) || voices[0];
+  const narrator = voices.find((v) => v.name === 'Mummy') || voices[0];
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -76,64 +93,28 @@ export const NowPlayingScreen: React.FC = () => {
             <Text style={styles.timeText}>{formatTime(activeStory.duration)}</Text>
           </View>
 
-          {/* Controls */}
-          <View style={styles.controlsRow}>
-            <TouchableOpacity onPress={() => seekTo(0)}>
-              <Text style={styles.ctrlIcon}>⏮</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => skipTime(-10)}>
-              <Text style={styles.ctrlIcon}>⏪</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.mainPlayBtn} onPress={togglePlayPause}>
-              <Text style={styles.mainPlayIcon}>{isPlaying ? '⏸' : '▶'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => skipTime(10)}>
-              <Text style={styles.ctrlIcon}>⏩</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => seekTo(activeStory.duration)}>
-              <Text style={styles.ctrlIcon}>⏭</Text>
-            </TouchableOpacity>
-          </View>
+          <AudioPlayer
+            source={activeStory.audioUri ?? null}
+            isPlaying={isPlaying}
+            onTogglePlay={togglePlayPause}
+            onSeek={seekTo}
+            onSkip={skipTime}
+            onRestart={() => seekTo(0)}
+            onEnd={() => seekTo(activeStory.duration)}
+          />
         </View>
 
         {/* Narrator Section */}
         <View style={styles.narratorSection}>
           <Text style={styles.narratorHeader}>Narrated by</Text>
-          <View style={styles.narratorCard}>
-            <Text style={styles.avatar}>{narrator.avatar}</Text>
-            <View style={styles.narratorDetails}>
-              <View style={styles.nameRow}>
-                <Text style={styles.narratorName}>{narrator.name}</Text>
-                <Text style={styles.check}> M</Text>
-              </View>
-              <Text style={styles.languages}>{narrator.languages.join(' • ')}</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.changeBtn}
-              onPress={() => setShowNarratorPicker(!showNarratorPicker)}
-            >
-              <Text style={styles.changeBtnText}>Change</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Dropdown / Inline Selector */}
-          {showNarratorPicker && (
-            <View style={styles.pickerBox}>
-              {voices.map((v) => (
-                <TouchableOpacity
-                  key={v.id}
-                  style={styles.pickerOption}
-                  onPress={() => {
-                    changeNarrator(activeStory.id, v.id);
-                    setShowNarratorPicker(false);
-                  }}
-                >
-                  <Text style={styles.pickerText}>{v.avatar} {v.name}</Text>
-                  {v.id === narrator.id && <Text style={styles.selectedCheck}>✓</Text>}
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
+          <NarratorCard avatar={narrator?.avatar || '👩🏽'} />
+          <TouchableOpacity
+            style={styles.changeNarratorButton}
+            onPress={() => setCurrentScreen('Voices')}
+            accessibilityRole="button"
+            accessibilityLabel="Change narrator">
+            <Text style={styles.changeNarratorText}> Change narrator</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -171,49 +152,49 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   timeText: { fontSize: 12, color: '#A0AEC0' },
-  controlsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '80%' },
-  ctrlIcon: { fontSize: 22, color: '#FFFFFF' },
-  mainPlayBtn: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: theme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mainPlayIcon: { color: '#FFFFFF', fontSize: 24 },
   narratorSection: { marginTop: theme.spacing.lg },
-  narratorHeader: { fontSize: 14, fontWeight: '700', color: theme.colors.textMuted, marginBottom: theme.spacing.xs },
+  narratorHeader: { fontSize: 19, fontWeight: '800', color: theme.colors.textDark, marginBottom: theme.spacing.sm },
   narratorCard: {
     backgroundColor: theme.colors.cardBg,
-    borderRadius: theme.borderRadius.card,
+    borderColor: theme.colors.borderLight,
+    borderRadius: 20,
+    borderWidth: 1,
+    height: 90,
     padding: theme.spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
   },
-  avatar: { fontSize: 32, marginRight: theme.spacing.sm },
+  narratorAvatarCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#F1E9FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: theme.spacing.sm,
+  },
+  avatar: { fontSize: 27 },
   narratorDetails: { flex: 1 },
-  nameRow: { flexDirection: 'row', alignItems: 'center' },
   narratorName: { fontSize: 16, fontWeight: '700', color: theme.colors.textDark },
-  check: { color: theme.colors.success, fontWeight: 'bold' },
-  languages: { fontSize: 12, color: theme.colors.textMuted },
-  changeBtn: { backgroundColor: '#F0EEFF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  changeBtnText: { color: theme.colors.primary, fontWeight: '700', fontSize: 12 },
-  pickerBox: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 8,
-    marginTop: 8,
-    borderWidth: 1,
+  languages: { fontSize: 13, color: '#746C88', marginTop: 4 },
+  selectedIndicator: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#36B37E',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  check: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  changeNarratorButton: {
+    height: 50,
+    marginTop: 12,
     borderColor: theme.colors.borderLight,
+    borderRadius: 15,
+    borderWidth: 1,
+    backgroundColor: theme.colors.cardBg,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  pickerOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  pickerText: { fontSize: 14, fontWeight: '600' },
-  selectedCheck: { color: theme.colors.success, fontWeight: 'bold' },
+  changeNarratorText: { color: theme.colors.textDark, fontSize: 16, fontWeight: '700' },
 });
