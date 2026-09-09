@@ -9,7 +9,7 @@ import { NowPlayingScreen } from './Screen/NowPlay';
 import { VoicesScreen } from './Screen/VoicePage';
 import { AddVoiceScreen } from './Screen/AddVoicePage';
 import { CreateStoryScreen } from './Screen/CreateStoryPage';
-import { ProfileScreen } from './Screen/ProfilePage';
+import { ProfileScreen, SettingsPlaceholderScreen } from './Screen/ProfilePage';
 
 const MainNavigator = () => {
   const { currentScreen, setCurrentScreen } = useApp();
@@ -28,6 +28,14 @@ const MainNavigator = () => {
         return <CreateStoryScreen />;
       case 'Profile':
         return <ProfileScreen />;
+      case 'EditProfile':
+        return <SettingsPlaceholderScreen title="Edit Profile" />;
+      case 'Language':
+        return <SettingsPlaceholderScreen title="Language" />;
+      case 'SleepTimer':
+        return <SettingsPlaceholderScreen title="Sleep Timer" />;
+      case 'PrivacyData':
+        return <SettingsPlaceholderScreen title="Privacy & Voice Data" />;
       default:
         return <HomeScreen />;
     }
@@ -37,10 +45,12 @@ const MainNavigator = () => {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
       <View style={styles.container}>{renderScreen()}</View>
-      <BottomNavigation
-        activeScreen={currentScreen}
-        onSelectTab={(screen) => setCurrentScreen(screen)}
-      />
+      {currentScreen !== 'Create' && (
+        <BottomNavigation
+          activeScreen={currentScreen}
+          onSelectTab={(screen) => setCurrentScreen(screen)}
+        />
+      )}
     </SafeAreaView>
   );
 };

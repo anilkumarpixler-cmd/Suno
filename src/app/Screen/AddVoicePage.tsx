@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { Text } from '@/components/app-text';
+import { Text } from '../components/Common/Text';
 import { useApp } from '../Context/AppContext';
 import { Header } from '../components/Common/header';
 import { theme } from '../Theme/Index';
@@ -138,6 +138,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     fontSize: 14,
+    fontFamily: theme.fonts.regular,
   },
   langRow: { flexDirection: 'row', flexWrap: 'wrap' },
   langChip: {

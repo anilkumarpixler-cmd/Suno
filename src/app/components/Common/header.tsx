@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { Text } from '@/components/app-text';
+import { Text } from './Text';
 import { theme } from '../../Theme/Index';
 
 interface HeaderProps {
@@ -18,7 +18,11 @@ export const Header: React.FC<HeaderProps> = ({ title, showBack, onBack, rightEl
           <Text style={styles.iconText}>←</Text>
         </TouchableOpacity>
       ) : (
-        <Text variant="display" style={styles.logo}>suno.</Text>
+        <View style={styles.logoContainer}>
+          <Text variant="display" style={styles.logo}>
+            suno<Text style={styles.logoDot}>.</Text>
+          </Text>
+        </View>
       )}
 
       {title && <Text variant="title" style={styles.title}>{title}</Text>}
@@ -37,10 +41,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
   },
   logo: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '800',
-    color: theme.colors.primary,
+    color: theme.colors.textDark,
     letterSpacing: -1,
+  },
+  logoContainer: {
+    paddingLeft: 0,
+  },
+  logoDot: {
+    color: theme.colors.primary,
+    fontWeight: '800',
   },
   title: {
     fontSize: 18,

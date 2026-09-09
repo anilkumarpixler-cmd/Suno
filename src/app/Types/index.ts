@@ -41,4 +41,8 @@ export type RootScreen =
   | 'Profile' 
   | 'NowPlaying' 
   | 'AddVoice' 
-  | 'GenerationLoader';
+  | 'GenerationLoader'
+  | 'EditProfile'
+  | 'Language'
+  | 'SleepTimer'
+  | 'PrivacyData';

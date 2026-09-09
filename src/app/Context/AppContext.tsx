@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Story, Voice, Child, RootScreen } from '../Types';
 import { initialChild, initialStories, initialVoices } from '../Data/mockData';
+import { getStories, saveStory, updateStory } from '../../storage';
 
 interface AppContextType {
   currentScreen: RootScreen;
@@ -19,7 +20,7 @@ interface AppContextType {
   addVoice: (name: string, languages: string[]) => void;
   toggleFavorite: (storyId: string) => void;
   changeNarrator: (storyId: string, narratorId: string) => void;
-  createNewStory: (title: string, category: any, durationMinutes: number) => void;
+  createNewStory: (title: string, category: any, durationMinutes: number, narratorId?: string) => Promise<void>;
   pendingStoryPrompt: { prompt: string; category: string; duration: number } | null;
   setPendingStoryPrompt: (val: any) => void;
 }
@@ -37,6 +38,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(120);
   const [pendingStoryPrompt, setPendingStoryPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getStories().then((savedStories) => {
+      if (isMounted && savedStories.length > 0) {
+        setStories((currentStories) => {
+          const savedIds = new Set(savedStories.map((story) => story.id));
+          return [...savedStories, ...currentStories.filter((story) => !savedIds.has(story.id))];
+        });
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Playback Timer Simulation
   useEffect(() => {
@@ -96,6 +114,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const toggleFavorite = (storyId: string) => {
+    const story = stories.find((item) => item.id === storyId);
+    if (story) void updateStory(storyId, { isFavorite: !story.isFavorite });
     setStories((prev) =>
       prev.map((s) => (s.id === storyId ? { ...s, isFavorite: !s.isFavorite } : s))
     );
@@ -105,6 +125,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const changeNarrator = (storyId: string, narratorId: string) => {
+    void updateStory(storyId, { narratorId });
     setStories((prev) =>
       prev.map((s) => (s.id === storyId ? { ...s, narratorId } : s))
     );
@@ -113,19 +134,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const createNewStory = (title: string, category: any, durationMinutes: number) => {
-    const defaultVoice = voices.find((v) => v.isDefault) || voices[0];
+  const createNewStory = async (title: string, category: any, durationMinutes: number, narratorId?: string) => {
+    const narrator = voices.find((voice) => voice.id === narratorId)
+      || voices.find((voice) => voice.isDefault)
+      || voices[0];
     const newStory: Story = {
       id: `s_${Date.now()}`,
       title: title || `${child.name}'s New Adventure`,
       description: 'A custom magical tale generated just for you.',
       category: category || 'Adventure',
       duration: durationMinutes * 60,
-      narratorId: defaultVoice.id,
+      narratorId: narrator.id,
       artwork: '✨',
       progress: 0,
       isFavorite: false,
     };
+    const saved = await saveStory(newStory);
+    if (!saved) return;
+
     setStories((prev) => [newStory, ...prev]);
     playStory(newStory, true);
   };
