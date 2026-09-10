@@ -1,7 +1,6 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Text } from '../components/Common/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp } from '../Context/AppContext';
 import { theme } from '../Theme/Index';

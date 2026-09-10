@@ -1,7 +1,6 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Text } from '../components/Common/Text';
 import { showToast } from '../components/Common/Toast';
 import { useApp } from '../Context/AppContext';
 import { RootScreen } from '../Types';

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { router } from 'expo-router';
 import { Story, Voice, Child, RootScreen } from '../Types';
 import { initialChild, initialStories, initialVoices } from '../Data/mockData';
@@ -11,6 +11,7 @@ interface AppContextType {
   voices: Voice[];
   stories: Story[];
   activeStory: Story | null;
+  lastPlayedStoryId: string | null;
   isPlaying: boolean;
   currentTime: number;
   playStory: (story: Story, startFromBeginning?: boolean) => void;
@@ -46,22 +47,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [voices, setVoices] = useState<Voice[]>(initialVoices);
   const [stories, setStories] = useState<Story[]>(initialStories);
   const [activeStory, setActiveStory] = useState<Story | null>(initialStories[0]);
+  const [lastPlayedStoryId, setLastPlayedStoryId] = useState<string | null>(
+    initialStories.find((story) => story.progress > 0)?.id ?? null
+  );
   
   // Audio playback controls
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(120);
   const [pendingStoryPrompt, setPendingStoryPrompt] = useState<any>(null);
+  const currentTimeRef = useRef(currentTime);
+  const activeStoryRef = useRef(activeStory);
+
+  currentTimeRef.current = currentTime;
+  activeStoryRef.current = activeStory;
+
+  const persistProgress = (storyId: string, time: number) => {
+    void updateStory(storyId, { progress: time });
+  };
+
+  const writeProgress = (storyId: string, time: number) => {
+    setStories((prev) =>
+      prev.map((item) => (item.id === storyId && item.progress !== time ? { ...item, progress: time } : item))
+    );
+    setActiveStory((prev) =>
+      prev && prev.id === storyId && prev.progress !== time ? { ...prev, progress: time } : prev
+    );
+  };
 
   const navigateToScreen = (screen: RootScreen) => {
+    const playing = activeStoryRef.current;
+    if (playing) persistProgress(playing.id, currentTimeRef.current);
     if (currentScreen === screen) return;
 
     setCurrentScreen(screen);
     const route = screenRoutes[screen] as never;
-    if (tabScreens.includes(screen)) {
-      router.replace(route);
-      return;
-    }
-    router.push(route);
+    router.replace(route);
   };
 
   useEffect(() => {
@@ -104,7 +124,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
-  // Playback Timer Simulation
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
     if (isPlaying && activeStory) {
@@ -121,22 +140,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => clearInterval(interval);
   }, [isPlaying, activeStory]);
 
+  useEffect(() => {
+    if (!activeStory) return;
+    writeProgress(activeStory.id, currentTime);
+    const storyId = activeStory.id;
+    const timeout = setTimeout(() => persistProgress(storyId, currentTime), 800);
+    return () => clearTimeout(timeout);
+  }, [currentTime, activeStory?.id]);
+
   const playStory = (story: Story, startFromBeginning = false) => {
-    setActiveStory(story);
-    setCurrentTime(startFromBeginning ? 0 : story.progress);
+    const finished = story.progress >= story.duration;
+    const resumeAt = startFromBeginning || finished ? 0 : story.progress;
+
+    setLastPlayedStoryId(story.id);
+    setActiveStory({ ...story, progress: resumeAt });
+    setCurrentTime(resumeAt);
+    writeProgress(story.id, resumeAt);
+    persistProgress(story.id, resumeAt);
     setIsPlaying(true);
     navigateToScreen('NowPlaying');
   };
 
   const togglePlayPause = () => {
-    setIsPlaying((prev) => !prev);
+    setIsPlaying((prev) => {
+      if (prev && activeStory) persistProgress(activeStory.id, currentTime);
+      return !prev;
+    });
   };
 
   const seekTo = (time: number) => {
-    if (activeStory) {
-      const clamped = Math.max(0, Math.min(time, activeStory.duration));
-      setCurrentTime(clamped);
-    }
+    if (!activeStory) return;
+    const clamped = Math.max(0, Math.min(time, activeStory.duration));
+    setCurrentTime(clamped);
+    writeProgress(activeStory.id, clamped);
+    persistProgress(activeStory.id, clamped);
   };
 
   const skipTime = (seconds: number) => {
@@ -218,6 +255,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         voices,
         stories,
         activeStory,
+        lastPlayedStoryId,
         isPlaying,
         currentTime,
         playStory,

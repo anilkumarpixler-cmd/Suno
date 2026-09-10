@@ -1,15 +1,25 @@
 import React, { useState } from 'react';
-import { View, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { Text } from '../components/Common/Text';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useApp } from '../Context/AppContext';
 import { Header } from '../components/Common/header';
 import { theme } from '../Theme/Index';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+const LANGUAGE_OPTIONS = ['Hindi + English', 'Hindi', 'English', 'Punjabi', 'Gujarati'];
+
 export const AddVoiceScreen: React.FC = () => {
   const { addVoice, setCurrentScreen } = useApp();
   const [name, setName] = useState('');
   const [selectedLang, setSelectedLang] = useState('Hindi + English');
+  const [isLangOpen, setIsLangOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [timer, setTimer] = useState(0);
   const [isRecorded, setIsRecorded] = useState(false);
@@ -44,7 +54,12 @@ export const AddVoiceScreen: React.FC = () => {
     <SafeAreaView style={styles.container}>
       <Header showBack onBack={() => setCurrentScreen('Voices')} title=" Add a Voice" />
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled
+      >
         <View style={styles.formGroup}>
           <Text style={styles.label}>Whose voice is this?</Text>
           <TextInput
@@ -55,20 +70,34 @@ export const AddVoiceScreen: React.FC = () => {
           />
         </View>
 
-        <View style={styles.formGroup}>
+        <View style={[styles.formGroup, styles.langGroup]}>
           <Text style={styles.label}>Language</Text>
-          <View style={styles.langRow}>
-            {['Hindi + English', 'English', 'Hindi'].map((lang) => (
-              <TouchableOpacity
-                key={lang}
-                style={[styles.langChip, selectedLang === lang && styles.activeLangChip]}
-                onPress={() => setSelectedLang(lang)}
-              >
-                <Text style={[styles.langText, selectedLang === lang && styles.activeLangText]}>
-                  {lang}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.dropdownWrap}>
+            <Pressable
+              style={styles.dropdownField}
+              onPress={() => setIsLangOpen((open) => !open)}
+              accessibilityRole="combobox"
+              accessibilityState={{ expanded: isLangOpen }}
+            >
+              <Text style={styles.dropdownValue}>{selectedLang}</Text>
+              <Text style={styles.chevron}>{isLangOpen ? '⌃' : '⌄'}</Text>
+            </Pressable>
+            {isLangOpen && (
+              <View style={styles.dropdownMenu}>
+                {LANGUAGE_OPTIONS.map((lang) => (
+                  <Pressable
+                    key={lang}
+                    style={[styles.option, lang === selectedLang && styles.selectedOption]}
+                    onPress={() => {
+                      setSelectedLang(lang);
+                      setIsLangOpen(false);
+                    }}
+                  >
+                    <Text style={styles.optionText}>{lang}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
           </View>
         </View>
 
@@ -130,8 +159,11 @@ export default AddVoiceScreen;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
-  content: { padding: theme.spacing.md },
+  scroll: { flex: 1, overflow: 'visible' },
+  content: { padding: theme.spacing.md, overflow: 'visible' },
   formGroup: { marginBottom: theme.spacing.lg },
+  langGroup: { zIndex: 20 },
+  dropdownWrap: { position: 'relative' },
   label: { fontSize: 14, fontWeight: '700', color: theme.colors.textDark, marginBottom: 8 },
   input: {
     backgroundColor: '#FFF',
@@ -140,20 +172,49 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     fontSize: 14,
-    fontFamily: theme.fonts.regular,
   },
-  langRow: { flexDirection: 'row', flexWrap: 'wrap' },
-  langChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#EFECE6',
-    marginRight: 8,
-    marginBottom: 8,
+  dropdownField: {
+    minHeight: 52,
+    borderColor: theme.colors.borderLight,
+    borderRadius: 12,
+    borderWidth: 1,
+    backgroundColor: theme.colors.cardBg,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  activeLangChip: { backgroundColor: theme.colors.primary },
-  langText: { fontSize: 12, fontWeight: '600' },
-  activeLangText: { color: '#FFF' },
+  dropdownValue: { color: theme.colors.textDark, fontSize: 16 },
+  chevron: {
+    color: theme.colors.textMuted,
+    fontSize: 22,
+    lineHeight: 18,
+    marginTop: -5,
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    top: 58,
+    left: 0,
+    right: 0,
+    zIndex: 30,
+    elevation: 8,
+    backgroundColor: theme.colors.cardBg,
+    borderColor: theme.colors.borderLight,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  option: {
+    minHeight: 48,
+    justifyContent: 'center',
+    paddingHorizontal: theme.spacing.md,
+  },
+  selectedOption: { backgroundColor: theme.colors.purpleLightBg },
+  optionText: {
+    color: theme.colors.textDark,
+    fontSize: 16,
+  },
   recorderBox: {
     backgroundColor: theme.colors.purpleLightBg,
     borderWidth: 2,

@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { Text } from '../Text';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Story, Voice } from '../../../Types';
 import { theme } from '../../../Theme/Index';
 
@@ -32,40 +31,20 @@ export const StoryCard: React.FC<StoryCardProps> = ({
       </View>
 
       <View style={styles.infoContainer}>
-        <Text variant="title" style={styles.title} numberOfLines={1}>
+        <Text style={styles.title} numberOfLines={1}>
           {story.title}
         </Text>
-        <Text variant="caption" style={styles.description} numberOfLines={2}>
+        <Text style={styles.description} numberOfLines={2}>
           {story.description}
         </Text>
 
         <View style={styles.metaRow}>
-          <Text variant="caption" style={styles.metaText}>
+          <Text style={styles.metaText}>
             {Math.floor(story.duration / 60)} mins • {narrator ? narrator.name : 'Family Voice'}
           </Text>
         </View>
 
-        {isContinue && (
-          <View style={styles.progressBg}>
-            <View
-              style={[
-                styles.fill,
-                { width: `${(story.progress / story.duration) * 100}%` },
-              ]}
-            />
-          </View>
-        )}
       </View>
-
-      <TouchableOpacity
-        style={styles.playBtn}
-        onPress={(e) => {
-          e.stopPropagation();
-          onPlayPress ? onPlayPress() : onPress();
-        }}
-      >
-        <Text style={styles.playIcon}>▶</Text>
-      </TouchableOpacity>
     </TouchableOpacity>
   );
 };
@@ -118,29 +97,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: theme.colors.primary,
-  },
-  progressBg: {
-    height: 4,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 2,
-    marginTop: 6,
-    overflow: 'hidden',
-  },
-  fill: {
-    height: '100%',
-    backgroundColor: theme.colors.primary,
-  },
-  playBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: theme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  playIcon: {
-    color: '#FFF',
-    fontSize: 14,
-    marginLeft: 2,
   },
 });

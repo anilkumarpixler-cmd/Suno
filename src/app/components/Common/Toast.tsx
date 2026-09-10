@@ -1,8 +1,7 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import ToastMessage from 'react-native-toast-message';
 import { theme } from '../../Theme/Index';
-import { Text } from './Text';
 
 export const showToast = (message: string) => {
 	ToastMessage.show({

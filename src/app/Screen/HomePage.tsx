@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { FlatList, View, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
-import { Text } from '../components/Common/Text';
+import { FlatList, View, ScrollView, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../Context/AppContext';
 import { Header } from '../components/Common/header';
@@ -10,7 +9,7 @@ import { theme } from '../Theme/Index';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export const HomeScreen: React.FC = () => {
-  const { child, stories, voices, playStory, setCurrentScreen } = useApp();
+  const { child, stories, voices, playStory, setCurrentScreen, lastPlayedStoryId } = useApp();
   const [selectedCategory, setSelectedCategory] = useState<Category>('All');
 
   const categories: { label: Category; icon?: string }[] = [
@@ -20,11 +19,17 @@ export const HomeScreen: React.FC = () => {
     { label: 'Adventure', icon: '🚀' },
   ];
 
+  const continueStory = lastPlayedStoryId
+    ? stories.find((s) => s.id === lastPlayedStoryId)
+    : undefined;
+
   const filteredStories = selectedCategory === 'All'
     ? stories
     : stories.filter((s) => s.category === selectedCategory);
 
-  const continueStory = stories.find((s) => s.progress > 0);
+  const popularStories = continueStory
+    ? filteredStories.filter((s) => s.id !== continueStory.id)
+    : filteredStories;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -36,7 +41,7 @@ export const HomeScreen: React.FC = () => {
         }
       />
       <FlatList
-        data={filteredStories}
+        data={popularStories}
         keyExtractor={(story) => story.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -82,7 +87,6 @@ export const HomeScreen: React.FC = () => {
                 );
               })}
             </ScrollView>
-
             {/* Continue Listening */}
             {continueStory && (
               <View style={styles.section}>

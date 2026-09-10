@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { Text } from './Text';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { RootScreen } from '../../Types';
 import { theme } from '../../Theme/Index';
 
@@ -32,7 +31,7 @@ export const BottomNavigation: React.FC<BottomNavProps> = ({ activeScreen, onSel
             <View style={[isCreate && styles.createPill]}>
               <Text style={[styles.icon, isCreate && styles.createIcon]}>{tab.icon}</Text>
             </View>
-            <Text variant="caption" style={[styles.label, isActive && styles.activeLabel]}>{tab.label}</Text>
+            <Text style={[styles.label, isActive && styles.activeLabel]}>{tab.label}</Text>
           </TouchableOpacity>
         );
       })}

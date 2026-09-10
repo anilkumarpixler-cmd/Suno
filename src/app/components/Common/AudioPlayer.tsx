@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AudioSource, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { Text } from './Text';
 
 interface AudioPlayerProps {
   source?: AudioSource;

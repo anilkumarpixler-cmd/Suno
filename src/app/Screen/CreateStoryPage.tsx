@@ -5,12 +5,12 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Text,
   TextInput,
   UIManager,
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Text } from '../components/Common/Text';
 import { useApp } from '../Context/AppContext';
 import { theme } from '../Theme/Index';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,7 +29,6 @@ interface CustomTextInputProps {
   placeholder?: string;
   onChangeText: (value: string) => void;
 }
-
 interface CustomDropdownProps {
   label: string;
   value: string;
@@ -303,7 +302,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 13,
     fontSize: 16,
-    fontFamily: theme.fonts.regular,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -381,7 +379,6 @@ const styles = StyleSheet.create({
   },
   createButtonText: {
     color: '#FFFFFF',
-    fontFamily: theme.fonts.bold,
     fontSize: 15,
     fontWeight: '700',
   },

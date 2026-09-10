@@ -32,7 +32,6 @@ export const initialVoices: Voice[] = [
     avatar: '👵🏽',
   },
 ];
-
 export const initialStories: Story[] = [
   {
     id: 's1',

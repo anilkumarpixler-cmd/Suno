@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { Text } from '../components/Common/Text';
+import { View, StyleSheet, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../Context/AppContext';
 import { Header } from '../components/Common/header';
@@ -49,7 +48,6 @@ export const NowPlayingScreen: React.FC = () => {
     const s = Math.floor(seconds % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
-
   const progressPct = (currentTime / activeStory.duration) * 100;
 
   return (

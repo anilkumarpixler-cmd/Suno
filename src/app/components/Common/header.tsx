@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { Text } from './Text';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { theme } from '../../Theme/Index';
 
 interface HeaderProps {
@@ -19,13 +18,13 @@ export const Header: React.FC<HeaderProps> = ({ title, showBack, onBack, rightEl
         </TouchableOpacity>
       ) : (
         <View style={styles.logoContainer}>
-          <Text variant="display" style={styles.logo}>
+          <Text style={styles.logo}>
             suno<Text style={styles.logoDot}>.</Text>
           </Text>
         </View>
       )}
 
-      {title && <Text variant="title" style={styles.title}>{title}</Text>}
+      {title && <Text style={styles.title}>{title}</Text>}
 
       <View style={styles.rightSlot}>{rightElement}</View>
     </View>

@@ -75,7 +75,6 @@ export const deleteStory = async (id: string): Promise<boolean> => {
     return false;
   }
 };
-
 export const clearStories = async (): Promise<boolean> => {
   try {
     await AsyncStorage.removeItem(STORIES_STORAGE_KEY);
