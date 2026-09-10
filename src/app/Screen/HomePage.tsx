@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
-import { Text } from '@/components/app-text';
+import { FlatList, View, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { Text } from '../components/Common/Text';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../Context/AppContext';
 import { Header } from '../components/Common/header';
@@ -35,78 +35,83 @@ export const HomeScreen: React.FC = () => {
           </TouchableOpacity>
         }
       />
-
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Hero Card */}
-        <LinearGradient colors={theme.gradients.hero} style={styles.heroCard}>
-          <View style={styles.heroTextContainer}>
-            <Text style={styles.heroTitle}>Stories in the voices they love.</Text>
-            <Text style={styles.heroSub}>
-              Listen to magical tales narrated by Mummy, Papa, Nani, or Dada.
-            </Text>
-          </View>
-          <Text style={styles.heroEmoji}>📚</Text>
-        </LinearGradient>
-
-        {/* Section Header & Pills */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Stories for {child.name}</Text>
-          <TouchableOpacity
-            accessibilityLabel="Create a story"
-            accessibilityRole="button"
-            style={styles.createStoryButton}
-            onPress={() => setCurrentScreen('Create')}
-          >
-            <Text style={styles.createStoryIcon}>+ Create</Text>
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillsScroll}>
-          {categories.map((cat) => {
-            const isActive = selectedCategory === cat.label;
-            return (
-              <TouchableOpacity
-                key={cat.label}
-                style={[styles.pill, isActive && styles.activePill]}
-                onPress={() => setSelectedCategory(cat.label)}
-              >
-                <Text style={[styles.pillText, isActive && styles.activePillText]}>
-                  {cat.icon ? `${cat.icon} ` : ''}{cat.label}
+      <FlatList
+        data={filteredStories}
+        keyExtractor={(story) => story.id}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        ListHeaderComponent={
+          <>
+            {/* Hero Card */}
+            <LinearGradient colors={theme.gradients.hero} style={styles.heroCard}>
+              <View style={styles.heroTextContainer}>
+                <Text style={styles.heroTitle}>Stories in the voices they love.</Text>
+                <Text style={styles.heroSub}>
+                  Listen to magical tales narrated by Mummy, Papa, Nani, or Dada's voice.
                 </Text>
+              </View>
+              <Text style={styles.heroEmoji}>📚</Text>
+            </LinearGradient>
+
+            {/* Section Header & Pills */}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Stories for {child.name}</Text>
+              <TouchableOpacity
+                accessibilityLabel="Create a story"
+                accessibilityRole="button"
+                style={styles.createStoryButton}
+                onPress={() => setCurrentScreen('Create')}
+              >
+                <Text style={styles.createStoryIcon}>+ Create</Text>
               </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+            </View>
 
-        {/* Continue Listening */}
-        {continueStory && (
-          <View style={styles.section}>
-            <Text style={styles.subSectionTitle}>Continue listening</Text>
-            <StoryCard
-              story={continueStory}
-              variant="continue"
-              narrator={voices.find((v) => v.id === continueStory.narratorId)}
-              onPress={() => playStory(continueStory, false)}
-            />
-          </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillsScroll}>
+              {categories.map((cat) => {
+                const isActive = selectedCategory === cat.label;
+                return (
+                  <TouchableOpacity
+                    key={cat.label}
+                    style={[styles.pill, isActive && styles.activePill]}
+                    onPress={() => setSelectedCategory(cat.label)}
+                  >
+                    <Text style={[styles.pillText, isActive && styles.activePillText]}>
+                      {cat.icon ? `${cat.icon} ` : ''}{cat.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* Continue Listening */}
+            {continueStory && (
+              <View style={styles.section}>
+                <Text style={styles.subSectionTitle}>Continue listening</Text>
+                <StoryCard
+                  story={continueStory}
+                  variant="continue"
+                  narrator={voices.find((v) => v.id === continueStory.narratorId)}
+                  onPress={() => playStory(continueStory, false)}
+                />
+              </View>
+            )}
+
+            <Text style={[styles.subSectionTitle, styles.popularTitle]}>Popular stories</Text>
+          </>
+        }
+        renderItem={({ item: story }) => (
+          <StoryCard
+            story={story}
+            narrator={voices.find((v) => v.id === story.narratorId)}
+            onPress={() => playStory(story, true)}
+          />
         )}
-
-        {/* Popular Stories */}
-        <View style={styles.section}>
-          <Text style={styles.subSectionTitle}>Popular stories</Text>
-          {filteredStories.map((story) => (
-            <StoryCard
-              key={story.id}
-              story={story}
-              narrator={voices.find((v) => v.id === story.narratorId)}
-              onPress={() => playStory(story, true)}
-            />
-          ))}
-        </View>
-      </ScrollView>
+      />
     </SafeAreaView>
   );
 };
+
+export default HomeScreen;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
@@ -121,6 +126,7 @@ const styles = StyleSheet.create({
   },
   avatarText: { fontSize: 18 },
   heroCard: {
+    minHeight: 180,
     borderRadius: theme.borderRadius.card,
     padding: theme.spacing.lg,
     flexDirection: 'row',
@@ -128,8 +134,8 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
   },
   heroTextContainer: { flex: 1, marginRight: theme.spacing.sm},
-  heroTitle: { fontSize: 20, fontWeight: '800', color: theme.colors.textDark, marginBottom: 4 },
-  heroSub: { fontSize: 12, color: theme.colors.textMuted, lineHeight: 16 },
+  heroTitle: { fontSize: 25, fontWeight: '800', color: theme.colors.textDark, marginBottom: 8 },
+  heroSub: { fontSize: 15, color: theme.colors.textMuted, lineHeight: 21 },
   heroEmoji: { fontSize: 49, lineHeight: 60 },
   sectionHeader: {
     marginBottom: theme.spacing.sm,
@@ -148,7 +154,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: '700',
   },
-  subSectionTitle: { fontSize: 24, fontWeight: '700', color: theme.colors.textMuted, marginBottom: theme.spacing.sm },
+  subSectionTitle: { fontSize: 24, fontWeight: '700', color: theme.colors.textDark, marginBottom: theme.spacing.sm },
+  popularTitle: { marginTop: theme.spacing.xs },
   pillsScroll: { marginBottom: theme.spacing.md },
   pill: {
     paddingHorizontal: 16,
@@ -158,7 +165,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   activePill: { backgroundColor: theme.colors.primary },
-  pillText: { fontSize: 13, fontWeight: '600', color: theme.colors.textDark },
-  activePillText: { color: '#FFFFFF' },
+  pillText: { fontSize: 17, fontWeight: '600', color: theme.colors.textDark },
+  activePillText: { color: '#FFFFFF',fontWeight: '700',fontSize: 17 },
   section: { marginTop: theme.spacing.xs },
 });

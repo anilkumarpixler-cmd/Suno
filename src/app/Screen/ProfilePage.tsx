@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '../components/Common/Text';
+import { showToast } from '../components/Common/Toast';
 import { useApp } from '../Context/AppContext';
 import { RootScreen } from '../Types';
 
@@ -110,12 +111,12 @@ const settings: Array<{
   title: string;
   subtitle: string;
   icon: SettingIcon;
-  destination: RootScreen;
+  destination?: RootScreen;
 }> = [
-  { id: 'language', title: 'Language', subtitle: 'Hindi + English', icon: 'globe', destination: 'Language' },
-  { id: 'sleepTimer', title: 'Sleep timer', subtitle: 'Off', icon: 'moon', destination: 'SleepTimer' },
+  { id: 'language', title: 'Language', subtitle: 'Hindi + English', icon: 'globe' },
+  { id: 'sleepTimer', title: 'Sleep timer', subtitle: 'Off', icon: 'moon' },
   { id: 'familyVoices', title: 'Family voices', subtitle: '3 voices', icon: 'microphone', destination: 'Voices' },
-  { id: 'privacy', title: 'Privacy & voice data', subtitle: 'Manage recordings', icon: 'lock', destination: 'PrivacyData' },
+  { id: 'privacy', title: 'Privacy & voice data', subtitle: 'Manage recordings', icon: 'lock' },
 ];
 
 export const ProfileScreen: React.FC = () => {
@@ -131,7 +132,7 @@ export const ProfileScreen: React.FC = () => {
           name="Aarav"
           age="3 years old"
           avatar={child.avatar || '🧒'}
-          onEdit={() => setCurrentScreen('EditProfile')}
+          onEdit={() => showToast('Child Profile Editing.')}
         />
         <SectionTitle>Settings</SectionTitle>
         {settings.map((setting) => (
@@ -140,13 +141,19 @@ export const ProfileScreen: React.FC = () => {
             title={setting.title}
             subtitle={setting.subtitle}
             icon={setting.icon}
-            onPress={() => setCurrentScreen(setting.destination)}
+            onPress={() => {
+              if (setting.destination) {
+                setCurrentScreen(setting.destination);
+              }
+            }}
           />
         ))}
       </ScrollView>
     </SafeAreaView>
   );
 };
+
+export default ProfileScreen;
 
 export const SettingsPlaceholderScreen: React.FC<{ title: string }> = ({ title }) => {
   const { setCurrentScreen } = useApp();

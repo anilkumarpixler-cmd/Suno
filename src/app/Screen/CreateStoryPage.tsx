@@ -14,6 +14,7 @@ import { Text } from '../components/Common/Text';
 import { useApp } from '../Context/AppContext';
 import { theme } from '../Theme/Index';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { showToast } from '../components/Common/Toast';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -109,20 +110,19 @@ const LanguageSelector: React.FC<{ selected: string; onChange: (language: string
     ))}
   </View>
 );
-
 export const CreateStoryScreen: React.FC = () => {
   const { child, voices, createNewStory, setCurrentScreen } = useApp();
-  const [childName, setChildName] = useState(child.name || 'Aarav');
-  const [age, setAge] = useState('3');
+  const [childName, setChildName] = useState(child.name);
+  const [age, setAge] = useState('3 years');
   const [language, setLanguage] = useState('Hindi');
   const [topic, setTopic] = useState('');
   const [storyType, setStoryType] = useState('Bedtime adventure');
-  const [narrator, setNarrator] = useState('❤️ Mummy');
+  const [narrator, setNarrator] = useState('Mummy');
   const [openDropdown, setOpenDropdown] = useState<'age' | 'storyType' | 'narrator' | null>(null);
 
-  const ageOptions = ['2 years', '3 years', '4 years', '5 years', '6 years'];
-  const storyTypeOptions = ['Bedtime adventure', 'Funny adventure', 'Magical adventure', 'Learning story', 'Animal adventure'];
-  const narratorOptions = ['❤️ Mummy', '💙 Daddy', '💜 Grandma', '💚 Grandpa'];
+  const ageOptions = ['3 years', '4 years', '5 years', '6 years'];
+  const storyTypeOptions = ['Bedtime adventure', 'Funny Story', 'Moral Story', 'Learning Story'];
+  const narratorOptions = ['Mummy', 'Papa', 'Nani'];
 
   const toggleDropdown = (dropdown: 'age' | 'storyType' | 'narrator') => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -136,10 +136,12 @@ export const CreateStoryScreen: React.FC = () => {
   };
 
   const handleCreateStory = async () => {
-    const narratorName = narrator.replace(/^[^\s]+\s/, '');
-    const selectedVoice = voices.find((voice) => voice.name === narratorName) || voices.find((voice) => voice.isDefault);
-    const title = topic.trim() ? `${childName}'s ${topic.trim()}` : `${childName}'s ${storyType}`;
+    const selectedVoice = voices.find((voice) => voice.name === narrator) || voices.find((voice) => voice.isDefault);
+    const personalizedName = childName.trim() || child.name || 'your child';
+    const title = topic.trim() ? `${personalizedName}'s ${topic.trim()}` : `${personalizedName}'s ${storyType}`;
 
+    showToast(`Creating ${personalizedName}'s personalized story`);
+    await new Promise((resolve) => setTimeout(resolve, 2400));
     await createNewStory(title, storyType, 5, selectedVoice?.id);
   };
 
@@ -149,15 +151,14 @@ export const CreateStoryScreen: React.FC = () => {
         <Pressable style={styles.backButton} onPress={() => setCurrentScreen('Home')} accessibilityLabel="Go back">
           <Text style={styles.backArrow}>‹</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>Create a Story</Text>
+        <Text style={styles.headerTitle}> Create a Story</Text>
         <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        onTouchStart={() => setOpenDropdown(null)}>
+        keyboardShouldPersistTaps="handled">
         <HeroCard childName={childName} />
 
         <View style={styles.formCard}>
@@ -220,6 +221,8 @@ export const CreateStoryScreen: React.FC = () => {
     </SafeAreaView>
   );
 };
+
+export default CreateStoryScreen;
 
 const styles = StyleSheet.create({
   container: {

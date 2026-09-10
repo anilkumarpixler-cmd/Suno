@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { router } from 'expo-router';
 import { Story, Voice, Child, RootScreen } from '../Types';
 import { initialChild, initialStories, initialVoices } from '../Data/mockData';
 import { getStories, saveStory, updateStory, getVoices, saveVoice, updateVoice } from '../../storage';
@@ -27,6 +28,18 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+const screenRoutes: Record<RootScreen, string> = {
+  Home: '/',
+  Voices: '/Screen/VoicePage',
+  Create: '/Screen/CreateStoryPage',
+  Profile: '/Screen/ProfilePage',
+  NowPlaying: '/Screen/NowPlay',
+  AddVoice: '/Screen/AddVoicePage',
+  GenerationLoader: '/Screen/CreateStoryPage',
+};
+
+const tabScreens: RootScreen[] = ['Home', 'Voices', 'Create', 'Profile'];
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentScreen, setCurrentScreen] = useState<RootScreen>('Home');
   const [child] = useState<Child>(initialChild);
@@ -38,6 +51,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(120);
   const [pendingStoryPrompt, setPendingStoryPrompt] = useState<any>(null);
+
+  const navigateToScreen = (screen: RootScreen) => {
+    if (currentScreen === screen) return;
+
+    setCurrentScreen(screen);
+    const route = screenRoutes[screen] as never;
+    if (tabScreens.includes(screen)) {
+      router.replace(route);
+      return;
+    }
+    router.push(route);
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -100,7 +125,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActiveStory(story);
     setCurrentTime(startFromBeginning ? 0 : story.progress);
     setIsPlaying(true);
-    setCurrentScreen('NowPlaying');
+    navigateToScreen('NowPlaying');
   };
 
   const togglePlayPause = () => {
@@ -188,7 +213,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider
       value={{
         currentScreen,
-        setCurrentScreen,
+        setCurrentScreen: navigateToScreen,
         child,
         voices,
         stories,

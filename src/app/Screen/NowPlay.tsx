@@ -121,6 +121,8 @@ export const NowPlayingScreen: React.FC = () => {
   );
 };
 
+export default NowPlayingScreen;
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
   content: { padding: theme.spacing.md },

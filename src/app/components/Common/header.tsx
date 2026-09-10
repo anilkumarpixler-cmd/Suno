@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
     padding: theme.spacing.xs,
   },
   iconText: {
-    fontSize: 30,
+    fontSize: 22,
     color: theme.colors.textDark,
     fontWeight: '600',
   },

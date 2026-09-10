@@ -5,6 +5,7 @@ import { Text } from '../components/Common/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp } from '../Context/AppContext';
 import { theme } from '../Theme/Index';
+import { showToast } from '../components/Common/Toast';
 
 type Voice = {
   id: string;
@@ -95,6 +96,14 @@ export const FamilyVoicesScreen: React.FC = () => {
   const { voices, setDefaultVoice, setCurrentScreen } = useApp();
   const voiceCards = voices.map(toVoiceViewModel);
 
+  const handleSetDefault = (voiceId: string) => {
+    const voice = voices.find((item) => item.id === voiceId);
+    if (!voice || voice.isDefault) return;
+
+    setDefaultVoice(voiceId);
+  showToast(`${voice.name} is now your default narrator`);
+  };
+
   const handlePreviewVoice = (voice: Voice) => {
     console.log(`Previewing ${voice.name}`);
   };
@@ -141,7 +150,7 @@ export const FamilyVoicesScreen: React.FC = () => {
           <VoiceCard
             key={voice.id}
             voice={voice}
-            onSetDefault={setDefaultVoice}
+            onSetDefault={handleSetDefault}
             onPreviewVoice={handlePreviewVoice}
             onVoiceSettings={handleVoiceSettings}
           />
@@ -160,6 +169,8 @@ export const FamilyVoicesScreen: React.FC = () => {
 };
 
 export const VoicesScreen = FamilyVoicesScreen;
+
+export default VoicesScreen;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
