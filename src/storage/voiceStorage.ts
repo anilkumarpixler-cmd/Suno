@@ -44,3 +44,17 @@ export const updateVoice = async (id: string, updates: Partial<Voice>): Promise<
     return false;
   }
 };
+
+export const deleteVoice = async (id: string): Promise<boolean> => {
+  try {
+    const voices = await getVoices();
+    await AsyncStorage.setItem(
+      VOICES_STORAGE_KEY,
+      JSON.stringify(voices.filter((voice) => voice.id !== id)),
+    );
+    return true;
+  } catch (error) {
+    logVoiceStorageError('delete', error);
+    return false;
+  }
+};

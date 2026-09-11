@@ -1,0 +1,21 @@
+---
+description: Reuse existing components, hooks, and methods before adding new ones
+alwaysApply: true
+---
+
+# Reuse methods
+
+- Inspect the project first. Reuse `Header`, `Text`, `theme`, `useApp`, storage helpers, and existing screens before creating new ones.
+- Extract a shared function/hook when the same logic appears twice (playback, timers, formatters, permission requests).
+- Put shared UI in `src/app/components` (or `src/components`), shared logic in hooks/services, shared shapes in `src/app/Types`.
+- Do not duplicate types (one `Voice` type, used everywhere). Do not copy-paste player controls into every screen.
+- Prefer a small reusable component over a large screen that inlines everything.
+
+```tsx
+// ❌ BAD — playback copied into VoicePage and AddVoicePage
+player.seekTo(0);
+player.play();
+
+// ✅ GOOD — one helper/hook used by both screens
+await playFromStart(player);
+```

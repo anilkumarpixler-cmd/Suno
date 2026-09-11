@@ -1,5 +1,15 @@
 export type Category = 'All' | 'Bedtime' | 'Animals' | 'Adventure' | 'Learning';
 
+export type StoryLanguage = 'Hindi' | 'English' | 'Hinglish';
+
+export type CreateStoryInput = {
+  title: string;
+  script: string;
+  language: StoryLanguage;
+  category: Category;
+  narratorId: string;
+};
+
 export interface Child {
   id: string;
   name: string;
@@ -10,9 +20,11 @@ export interface Voice {
   id: string;
   name: string;
   languages: string[];
+  // status:string;
   status: 'Ready' | 'Processing' | 'Incomplete';
   isDefault: boolean;
   avatar: string;
+  audioUri?: string;
 }
 
 export interface Story {
@@ -26,6 +38,8 @@ export interface Story {
   audioUri?: string;
   progress: number; // in seconds
   isFavorite?: boolean;
+  script: string;
+  language?: StoryLanguage;
 }
 
 export interface PlayerState {

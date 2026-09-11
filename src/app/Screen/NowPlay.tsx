@@ -4,8 +4,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../Context/AppContext';
 import { Header } from '../components/Common/header';
 import { theme } from '../Theme/Index';
+import { estimateDuration } from '../services/storySpeech';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AudioPlayer } from '../components/Common/AudioPlayer';
 
 interface NarratorCardProps {
   avatar: string;
@@ -34,6 +34,8 @@ export const NowPlayingScreen: React.FC = () => {
     togglePlayPause,
     seekTo,
     skipTime,
+    playNextStory,
+    playPreviousStory,
     toggleFavorite,
     voices,
     setCurrentScreen,
@@ -41,14 +43,15 @@ export const NowPlayingScreen: React.FC = () => {
 
   if (!activeStory) return null;
 
-  const narrator = voices.find((v) => v.name === 'Mummy') || voices[0];
+  const narrator = voices.find((v) => v.id === activeStory.narratorId) || voices[0];
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
-  const progressPct = (currentTime / activeStory.duration) * 100;
+  const duration = estimateDuration(activeStory.script || activeStory.title);
+  const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -71,7 +74,9 @@ export const NowPlayingScreen: React.FC = () => {
           </LinearGradient>
 
           <Text style={styles.title}>{activeStory.title}</Text>
-          <Text style={styles.subtitle}>{activeStory.category} • {Math.floor(activeStory.duration / 60)} min</Text>
+          <Text style={styles.subtitle}>
+            {activeStory.category} • {duration < 60 ? `${duration}s` : `${Math.round(duration / 60)} min`}
+          </Text>
 
           {/* Slider Bar */}
           <TouchableOpacity
@@ -80,7 +85,7 @@ export const NowPlayingScreen: React.FC = () => {
             onPress={(e) => {
               const clickX = e.nativeEvent.locationX;
               const newPct = clickX / 280; // approximate width
-              seekTo(newPct * activeStory.duration);
+              seekTo(newPct * duration);
             }}
           >
             <View style={[styles.sliderFill, { width: `${progressPct}%` }]} />
@@ -88,18 +93,26 @@ export const NowPlayingScreen: React.FC = () => {
 
           <View style={styles.timeRow}>
             <Text style={styles.timeText}>{formatTime(currentTime)}</Text>
-            <Text style={styles.timeText}>{formatTime(activeStory.duration)}</Text>
+            <Text style={styles.timeText}>{formatTime(duration)}</Text>
           </View>
 
-          <AudioPlayer
-            source={activeStory.audioUri ?? null}
-            isPlaying={isPlaying}
-            onTogglePlay={togglePlayPause}
-            onSeek={seekTo}
-            onSkip={skipTime}
-            onRestart={() => seekTo(0)}
-            onEnd={() => seekTo(activeStory.duration)}
-          />
+          <View style={styles.controlsRow}>
+            <TouchableOpacity onPress={playPreviousStory} accessibilityLabel="Previous story">
+              <Text style={styles.ctrlIcon}>⏮</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => skipTime(-10)}>
+              <Text style={styles.ctrlIcon}>⏪</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.mainPlayBtn} onPress={togglePlayPause}>
+              <Text style={styles.mainPlayIcon}>{isPlaying ? '⏸' : '▶'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => skipTime(10)}>
+              <Text style={styles.ctrlIcon}>⏩</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={playNextStory} accessibilityLabel="Next story">
+              <Text style={styles.ctrlIcon}>⏭</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Narrator Section */}
@@ -152,6 +165,17 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   timeText: { fontSize: 12, color: '#A0AEC0' },
+  controlsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '80%' },
+  ctrlIcon: { fontSize: 22, color: '#FFFFFF' },
+  mainPlayBtn: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mainPlayIcon: { color: '#FFFFFF', fontSize: 24 },
   narratorSection: { marginTop: theme.spacing.lg },
   narratorHeader: { fontSize: 19, fontWeight: '800', color: theme.colors.textDark, marginBottom: theme.spacing.sm },
   narratorCard: {

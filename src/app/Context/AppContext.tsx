@@ -1,10 +1,20 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { router } from 'expo-router';
-import { Story, Voice, Child, RootScreen } from '../Types';
+import { Child, CreateStoryInput, RootScreen, Story, Voice } from '../Types';
 import { initialChild, initialStories, initialVoices } from '../Data/mockData';
-import { getStories, saveStory, updateStory, getVoices, saveVoice, updateVoice } from '../../storage';
+import { useStoryPlayer } from '../hooks/useStoryPlayer';
+import { estimateDuration, normalizeStory } from '../services/storySpeech';
+import {
+  deleteVoice as deleteStoredVoice,
+  getStories,
+  getVoices,
+  saveStory,
+  saveVoice,
+  updateStory,
+  updateVoice,
+} from '../../storage';
 
-interface AppContextType {
+type AppContextType = {
   currentScreen: RootScreen;
   setCurrentScreen: (screen: RootScreen) => void;
   child: Child;
@@ -14,18 +24,19 @@ interface AppContextType {
   lastPlayedStoryId: string | null;
   isPlaying: boolean;
   currentTime: number;
-  playStory: (story: Story, startFromBeginning?: boolean) => void;
+  playStory: (story: Story, autoPlay?: boolean) => void;
   togglePlayPause: () => void;
   seekTo: (time: number) => void;
   skipTime: (seconds: number) => void;
+  playNextStory: () => void;
+  playPreviousStory: () => void;
   setDefaultVoice: (voiceId: string) => void;
-  addVoice: (name: string, languages: string[]) => Promise<void>;
+  addVoice: (name: string, languages: string[], audioUri?: string) => Promise<void>;
+  deleteVoice: (voiceId: string) => Promise<void>;
   toggleFavorite: (storyId: string) => void;
-  changeNarrator: (storyId: string, narratorId: string) => void;
-  createNewStory: (title: string, category: any, durationMinutes: number, narratorId?: string) => Promise<void>;
-  pendingStoryPrompt: { prompt: string; category: string; duration: number } | null;
-  setPendingStoryPrompt: (val: any) => void;
-}
+  changeNarrator: (storyId: string, voiceId: string) => void;
+  createNewStory: (input: CreateStoryInput) => Promise<void>;
+};
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -39,61 +50,50 @@ const screenRoutes: Record<RootScreen, string> = {
   GenerationLoader: '/Screen/CreateStoryPage',
 };
 
-const tabScreens: RootScreen[] = ['Home', 'Voices', 'Create', 'Profile'];
-
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentScreen, setCurrentScreen] = useState<RootScreen>('Home');
+  const [currentScreen, setCurrentScreenState] = useState<RootScreen>('Home');
   const [child] = useState<Child>(initialChild);
   const [voices, setVoices] = useState<Voice[]>(initialVoices);
   const [stories, setStories] = useState<Story[]>(initialStories);
-  const [activeStory, setActiveStory] = useState<Story | null>(initialStories[0]);
   const [lastPlayedStoryId, setLastPlayedStoryId] = useState<string | null>(
     initialStories.find((story) => story.progress > 0)?.id ?? null
   );
-  
-  // Audio playback controls
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [currentTime, setCurrentTime] = useState<number>(120);
-  const [pendingStoryPrompt, setPendingStoryPrompt] = useState<any>(null);
-  const currentTimeRef = useRef(currentTime);
-  const activeStoryRef = useRef(activeStory);
-
-  currentTimeRef.current = currentTime;
-  activeStoryRef.current = activeStory;
-
-  const persistProgress = (storyId: string, time: number) => {
-    void updateStory(storyId, { progress: time });
-  };
-
-  const writeProgress = (storyId: string, time: number) => {
-    setStories((prev) =>
-      prev.map((item) => (item.id === storyId && item.progress !== time ? { ...item, progress: time } : item))
-    );
-    setActiveStory((prev) =>
-      prev && prev.id === storyId && prev.progress !== time ? { ...prev, progress: time } : prev
-    );
-  };
 
   const navigateToScreen = (screen: RootScreen) => {
-    const playing = activeStoryRef.current;
-    if (playing) persistProgress(playing.id, currentTimeRef.current);
     if (currentScreen === screen) return;
-
-    setCurrentScreen(screen);
-    const route = screenRoutes[screen] as never;
-    router.replace(route);
+    setCurrentScreenState(screen);
+    router.replace(screenRoutes[screen] as never);
   };
+
+  const {
+    activeStory,
+    setActiveStory,
+    isPlaying,
+    currentTime,
+    playStory,
+    togglePlayPause,
+    seekTo,
+    skipTime,
+    playNextStory,
+    playPreviousStory,
+    restartSpeech,
+  } = useStoryPlayer({
+    stories,
+    voices,
+    currentScreen,
+    setCurrentScreen: navigateToScreen,
+  });
 
   useEffect(() => {
     let isMounted = true;
 
     getStories().then((savedStories) => {
-      if (isMounted && savedStories.length > 0) {
-        setStories((currentStories) => {
-          const savedIds = new Set(savedStories.map((story) => story.id));
-          return [...savedStories, ...currentStories.filter((story) => !savedIds.has(story.id))];
-        });
-      }
+      if (!isMounted || savedStories.length === 0) return;
+      setStories((currentStories) => {
+        const normalized = savedStories.map((story) => normalizeStory(story));
+        const savedIds = new Set(normalized.map((story) => story.id));
+        return [...normalized, ...currentStories.filter((story) => !savedIds.has(story.id))];
+      });
     });
 
     return () => {
@@ -125,60 +125,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-    if (isPlaying && activeStory) {
-      interval = setInterval(() => {
-        setCurrentTime((prev) => {
-          if (prev >= activeStory.duration) {
-            setIsPlaying(false);
-            return activeStory.duration;
-          }
-          return prev + 1;
-        });
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [isPlaying, activeStory]);
+    if (activeStory) setLastPlayedStoryId(activeStory.id);
+  }, [activeStory?.id]);
 
   useEffect(() => {
     if (!activeStory) return;
-    writeProgress(activeStory.id, currentTime);
     const storyId = activeStory.id;
-    const timeout = setTimeout(() => persistProgress(storyId, currentTime), 800);
+    const time = currentTime;
+    setStories((prev) =>
+      prev.map((item) => (item.id === storyId && item.progress !== time ? { ...item, progress: time } : item))
+    );
+    const timeout = setTimeout(() => {
+      void updateStory(storyId, { progress: time });
+    }, 800);
     return () => clearTimeout(timeout);
   }, [currentTime, activeStory?.id]);
-
-  const playStory = (story: Story, startFromBeginning = false) => {
-    const finished = story.progress >= story.duration;
-    const resumeAt = startFromBeginning || finished ? 0 : story.progress;
-
-    setLastPlayedStoryId(story.id);
-    setActiveStory({ ...story, progress: resumeAt });
-    setCurrentTime(resumeAt);
-    writeProgress(story.id, resumeAt);
-    persistProgress(story.id, resumeAt);
-    setIsPlaying(true);
-    navigateToScreen('NowPlaying');
-  };
-
-  const togglePlayPause = () => {
-    setIsPlaying((prev) => {
-      if (prev && activeStory) persistProgress(activeStory.id, currentTime);
-      return !prev;
-    });
-  };
-
-  const seekTo = (time: number) => {
-    if (!activeStory) return;
-    const clamped = Math.max(0, Math.min(time, activeStory.duration));
-    setCurrentTime(clamped);
-    writeProgress(activeStory.id, clamped);
-    persistProgress(activeStory.id, clamped);
-  };
-
-  const skipTime = (seconds: number) => {
-    seekTo(currentTime + seconds);
-  };
 
   const setDefaultVoice = (voiceId: string) => {
     void updateVoice(voiceId, { isDefault: true });
@@ -191,58 +152,76 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const addVoice = async (name: string, languages: string[]) => {
+  const addVoice = async (name: string, languages: string[], audioUri?: string) => {
     const newVoice: Voice = {
       id: `v_${Date.now()}`,
-      name,
+      name: name.trim(),
       languages,
       status: 'Ready',
       isDefault: false,
-      avatar: '👨🏽',
+      avatar: '👤',
+      audioUri,
     };
     if (await saveVoice(newVoice)) setVoices((prev) => [...prev, newVoice]);
+  };
+
+  const deleteVoice = async (voiceId: string) => {
+    if (await deleteStoredVoice(voiceId)) {
+      setVoices((prev) => prev.filter((voice) => voice.id !== voiceId));
+    }
   };
 
   const toggleFavorite = (storyId: string) => {
     const story = stories.find((item) => item.id === storyId);
     if (story) void updateStory(storyId, { isFavorite: !story.isFavorite });
     setStories((prev) =>
-      prev.map((s) => (s.id === storyId ? { ...s, isFavorite: !s.isFavorite } : s))
+      prev.map((item) => (item.id === storyId ? { ...item, isFavorite: !item.isFavorite } : item))
     );
-    if (activeStory && activeStory.id === storyId) {
-      setActiveStory((prev) => prev ? { ...prev, isFavorite: !prev.isFavorite } : null);
-    }
+    setActiveStory((currentStory) =>
+      currentStory?.id === storyId
+        ? { ...currentStory, isFavorite: !currentStory.isFavorite }
+        : currentStory
+    );
   };
 
-  const changeNarrator = (storyId: string, narratorId: string) => {
-    void updateStory(storyId, { narratorId });
-    setStories((prev) =>
-      prev.map((s) => (s.id === storyId ? { ...s, narratorId } : s))
+  const changeNarrator = (storyId: string, voiceId: string) => {
+    const current =
+      activeStory?.id === storyId
+        ? activeStory
+        : stories.find((story) => story.id === storyId);
+    if (!current) return;
+
+    const nextStory = { ...current, narratorId: voiceId };
+    void updateStory(storyId, { narratorId: voiceId });
+    setStories((currentStories) =>
+      currentStories.map((story) => (story.id === storyId ? nextStory : story))
     );
-    if (activeStory && activeStory.id === storyId) {
-      setActiveStory((prev) => prev ? { ...prev, narratorId } : null);
-    }
+    setActiveStory((currentStory) =>
+      currentStory?.id === storyId ? nextStory : currentStory
+    );
+    restartSpeech(nextStory);
   };
 
-  const createNewStory = async (title: string, category: any, durationMinutes: number, narratorId?: string) => {
-    const narrator = voices.find((voice) => voice.id === narratorId)
-      || voices.find((voice) => voice.isDefault)
-      || voices[0];
+  const createNewStory = async (input: CreateStoryInput) => {
+    const script = input.script.trim();
     const newStory: Story = {
       id: `s_${Date.now()}`,
-      title: title || `${child.name}'s New Adventure`,
-      description: 'A custom magical tale generated just for you.',
-      category: category || 'Adventure',
-      duration: durationMinutes * 60,
-      narratorId: narrator.id,
-      artwork: '✨',
+      title: input.title.trim(),
+      description: script.slice(0, 80),
+      category: input.category,
+      duration: estimateDuration(script),
+      narratorId: input.narratorId,
+      artwork: '📖',
       progress: 0,
       isFavorite: false,
+      script,
+      language: input.language,
     };
+
     const saved = await saveStory(newStory);
     if (!saved) return;
 
-    setStories((prev) => [newStory, ...prev]);
+    setStories((currentStories) => [newStory, ...currentStories]);
     playStory(newStory, true);
   };
 
@@ -262,13 +241,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         togglePlayPause,
         seekTo,
         skipTime,
+        playNextStory,
+        playPreviousStory,
         setDefaultVoice,
         addVoice,
+        deleteVoice,
         toggleFavorite,
         changeNarrator,
         createNewStory,
-        pendingStoryPrompt,
-        setPendingStoryPrompt,
       }}
     >
       {children}

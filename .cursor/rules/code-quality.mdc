@@ -1,0 +1,25 @@
+---
+description: Code quality — types, errors, cleanup, lint, no leftover debug
+alwaysApply: true
+---
+
+# Code quality
+
+- Handle loading, empty, and error states on data and list screens.
+- For audio: handle play, pause, seek, progress, loading, errors, and unload/cleanup on close and unmount.
+- Do not leave `console.log`, commented-out blocks, unused props, or dead styles in finished work.
+- Validate before save (required fields, recording present). Confirm destructive actions (delete).
+- Persist durable data only (copy recordings out of cache/temp before storing URIs).
+- After major changes run `npm run lint` and briefly list files changed + what was implemented.
+
+```tsx
+// ❌ BAD
+export const PreviewModal = (props: any) => { console.log(props); return null; };
+
+// ✅ GOOD
+type PreviewModalProps = {
+  uri: string | null;
+  onClose: () => void;
+};
+export const PreviewModal = ({ uri, onClose }: PreviewModalProps) => { /* ... */ };
+```

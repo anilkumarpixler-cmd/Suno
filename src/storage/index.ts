@@ -15,4 +15,5 @@ export {
 	getVoices,
 	saveVoice,
 	updateVoice,
+	deleteVoice,
 } from './voiceStorage';

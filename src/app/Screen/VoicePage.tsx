@@ -1,34 +1,35 @@
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, View,Text} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp } from '../Context/AppContext';
 import { theme } from '../Theme/Index';
 import { showToast } from '../components/Common/Toast';
+import { Voice } from '../Types';
+import { useAudioPlayer } from 'expo-audio';
+import { PreviewModal } from '../modal/previewModal';
 
-type Voice = {
-  id: string;
-  name: string;
-  language: string;
-  status: string;
-  avatar: string;
-  isDefault: boolean;
-};
+// type Voice = {
+//   id: string;
+//   name: string;
+//   language: string;
+//   status: string;
+//   avatar: string;
+//   isDefault: boolean;
+// };
 
-interface VoiceCardProps {
+interface VoiceCardProps {  
   voice: Voice;
   onSetDefault: (voiceId: string) => void;
   onPreviewVoice: (voice: Voice) => void;
   onVoiceSettings: (voice: Voice) => void;
+   onDeleteVoice: (voiceId: string) => void;
 }
+const VoiceCard: React.FC<VoiceCardProps> = ({ voice,onSetDefault,onPreviewVoice,onVoiceSettings,onDeleteVoice}) =>
 
-const VoiceCard: React.FC<VoiceCardProps> = ({
-  voice,
-  onSetDefault,
-  onPreviewVoice,
-  onVoiceSettings,
-}) => (
-  <View style={styles.voiceCard}>
+  (
+    <View style={styles.voiceCard}>
+    
     <View style={styles.voiceTopRow}>
       <View style={styles.avatarCircle}>
         <Text style={styles.avatarEmoji}>{voice.avatar}</Text>
@@ -36,7 +37,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
       <View style={styles.voiceDetails}>
         <Text style={styles.voiceName}>{voice.name}</Text>
         <Text style={styles.metaText}>
-          {voice.language} · {voice.isDefault ? 'Default' : voice.status}
+          {voice.languages.join(' · ')} · {voice.isDefault ? 'Default' : voice.status}
         </Text>
       </View>
       {voice.isDefault && (
@@ -63,6 +64,14 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
           accessibilityLabel={`${voice.name} settings`}>
           <Text style={styles.settingsIcon}>⚙</Text>
         </Pressable>
+       <Pressable
+       style={styles.actionButton}
+        onPress={() => onDeleteVoice(voice.id)}
+        accessibilityRole="button"
+        accessibilityLabel={`Delete ${voice.name}`}
+         >
+       <Text>Delete</Text>
+       </Pressable>
       </View>
     ) : (
       <Pressable
@@ -71,6 +80,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
         accessibilityRole="button">
         <Text style={styles.defaultButtonText}> Set as default</Text>
       </Pressable>
+
     )}
   </View>
 );
@@ -82,18 +92,26 @@ const toVoiceViewModel = (voice: {
   status: string;
   avatar: string;
   isDefault: boolean;
+  audioUri?:string;
 }): Voice => ({
   id: voice.id,
   name: voice.name,
-  language: voice.languages.join(' & '),
-  status: voice.name === 'Papa' ? '98% ready' : voice.status,
+  languages: voice.languages,
+  status: voice.name === 'Papa' ? 'Ready' : voice.status as Voice['status'],
   avatar: voice.name === 'Mummy' ? '👩' : voice.name === 'Papa' ? '👨' : voice.name === 'Nani' ? '👵' : voice.avatar,
   isDefault: voice.isDefault,
+  audioUri: voice.audioUri,
 });
 
 export const FamilyVoicesScreen: React.FC = () => {
-  const { voices, setDefaultVoice, setCurrentScreen } = useApp();
+  const { voices, setDefaultVoice, setCurrentScreen,deleteVoice } = useApp();
   const voiceCards = voices.map(toVoiceViewModel);
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
+  
+console.log(previewUri,"🤢🤢🤢")
+
+const player = useAudioPlayer(previewUri ?? undefined);
+
 
   const handleSetDefault = (voiceId: string) => {
     const voice = voices.find((item) => item.id === voiceId);
@@ -104,8 +122,30 @@ export const FamilyVoicesScreen: React.FC = () => {
   };
 
   const handlePreviewVoice = (voice: Voice) => {
-    console.log(`Previewing ${voice.name}`);
+    // console.log(`Previewing ${voice.name}`);
+    console.log(voice,"👀👀")
+     if (!voice.audioUri) {
+    Alert.alert('No recording', 'This voice does not have a recording.');
+    return;
+  }
+
+  // Open your preview player here
+    setPreviewUri(voice.audioUri)
   };
+
+
+  const handlePlayPreview = () => {
+  if (!previewUri) return;
+
+  player.seekTo(0);
+  player.play();
+  console.log("😎😎😎palayer called ")
+};
+
+const handleStopPreview = () => {
+  player.pause();
+  player.seekTo(0);
+};
 
   const handleVoiceSettings = (voice: Voice) => {
     console.log(`Opening settings for ${voice.name}`);
@@ -145,6 +185,46 @@ export const FamilyVoicesScreen: React.FC = () => {
 
         <Text style={styles.sectionTitle}>Your voices</Text>
 
+        
+          <PreviewModal
+          visible={previewUri !==null}
+          previewUri={previewUri}
+          setPreviewUri={setPreviewUri}
+          handlePlayPreview={handlePlayPreview}
+          handleStopPreview={handleStopPreview}
+          />
+
+        {/* {previewUri !==null? (
+        
+  <View style={styles.previewPlayer}>
+    <Text style={styles.previewTitle}>Voice Preview</Text>
+
+    <Pressable
+      style={styles.previewPlayButton}
+      onPress={handlePlayPreview}
+    >
+      <Text style={styles.previewButtonText}>
+        ▶ Play
+      </Text>
+    </Pressable>
+
+    <Pressable
+      style={styles.previewStopButton}
+      onPress={handleStopPreview}
+    >
+      <Text style={styles.previewStopText}>
+        ■ Stop
+      </Text>
+    </Pressable>
+
+    <Pressable
+      onPress={() => setPreviewUri(null)}
+    >
+      <Text>Close</Text>
+    </Pressable>
+  </View>
+):null} */}
+
         {voiceCards.map((voice) => (
           <VoiceCard
             key={voice.id}
@@ -152,6 +232,7 @@ export const FamilyVoicesScreen: React.FC = () => {
             onSetDefault={handleSetDefault}
             onPreviewVoice={handlePreviewVoice}
             onVoiceSettings={handleVoiceSettings}
+            onDeleteVoice={deleteVoice}
           />
         ))}
 
@@ -310,4 +391,77 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   addVoiceButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  previewPlayer: {
+  width: '100%',
+  // flex:1,
+  // justifyContent:"center",
+  // alignItems:"center",
+  backgroundColor: '#FFFFFF',
+  borderRadius: 18,
+  padding: 16,
+  marginTop: 16,
+  marginBottom: 16,
+
+  // Shadow
+  shadowColor: '#000',
+  shadowOffset: {
+    width: 0,
+    height: 3,
+  },
+  shadowOpacity: 0.1,
+  shadowRadius: 6,
+  elevation: 4,
+},
+
+previewTitle: {
+  fontSize: 17,
+  fontWeight: '700',
+  color: theme.colors.textDark,
+  marginBottom: 14,
+},
+
+previewPlayButton: {
+  width: '100%',
+  backgroundColor: theme.colors.primary,
+  paddingVertical: 12,
+  borderRadius: 12,
+  alignItems: 'center',
+  justifyContent: 'center',
+  marginBottom: 10,
+},
+
+previewButtonText: {
+  color: '#FFFFFF',
+  fontSize: 14,
+  fontWeight: '700',
+},
+
+previewStopButton: {
+  width: '100%',
+  backgroundColor: '#EFECE6',
+  paddingVertical: 12,
+  borderRadius: 12,
+  alignItems: 'center',
+  justifyContent: 'center',
+  marginBottom: 10,
+},
+
+previewStopText: {
+  color: theme.colors.textDark,
+  fontSize: 14,
+  fontWeight: '700',
+},
+
+previewCloseButton: {
+  width: '100%',
+  paddingVertical: 10,
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+
+previewCloseText: {
+  color: '#E53E3E',
+  fontSize: 14,
+  fontWeight: '600',
+},
 });

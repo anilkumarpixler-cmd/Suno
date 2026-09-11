@@ -1,0 +1,17 @@
+---
+description: TypeScript, Expo, naming, and file-structure coding standards
+alwaysApply: true
+---
+
+# Code standards
+
+- Stack: React Native + TypeScript + Expo SDK 57 + Expo Router. Read https://docs.expo.dev/versions/v57.0.0/ before writing code.
+- TypeScript only. Avoid `any`. Types must match what the UI actually renders (no extra/missing fields).
+- Follow existing `package.json`. Do not upgrade/downgrade packages unless required. Prefer Expo Go compatible APIs.
+- Use Expo Router for navigation. Keep screens, components, hooks, services, and types separated.
+- Name files and exports to match neighbors (`AddVoicePage`, `FamilyVoicesScreen`, `useApp`).
+- Use `StyleSheet`. Use `expo-image` for images. Use existing `expo-audio` / `expo-av` for media.
+- Use `AsyncStorage` for simple local data. Never hardcode secrets.
+- Smallest clean change. Do not rewrite unrelated working code.
+- No file over 500 lines. If a screen or module would exceed 500 lines, extract reusable components, hooks, or helpers into new files instead of growing the same file.
+- Never `git push` (or force-push) unless the user explicitly asks to push. Commit only when asked. Do not publish code without permission.

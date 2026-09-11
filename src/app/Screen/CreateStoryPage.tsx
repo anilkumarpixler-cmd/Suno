@@ -13,6 +13,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../Context/AppContext';
 import { theme } from '../Theme/Index';
+import { StoryLanguage } from '../Types';
+import { getFallbackScript, mapStoryTypeToCategory } from '../services/storySpeech';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { showToast } from '../components/Common/Toast';
 
@@ -28,6 +30,7 @@ interface CustomTextInputProps {
   value: string;
   placeholder?: string;
   onChangeText: (value: string) => void;
+  multiline?: boolean;
 }
 interface CustomDropdownProps {
   label: string;
@@ -41,14 +44,21 @@ interface CustomDropdownProps {
 const FormLabel: React.FC<FormLabelProps> = ({ children }) => (
   <Text style={styles.label}>{children}</Text>
 );
-const CustomTextInput: React.FC<CustomTextInputProps> = ({ value, placeholder, onChangeText }) => (
+const CustomTextInput: React.FC<CustomTextInputProps> = ({
+  value,
+  placeholder,
+  onChangeText,
+  multiline = false,
+}) => (
   <TextInput
-    style={styles.input}
+    style={[styles.input, multiline && styles.storyInput]}
     value={value}
     placeholder={placeholder}
     placeholderTextColor="#63708A"
     onChangeText={onChangeText}
     selectionColor="#17233D"
+    multiline={multiline}
+    textAlignVertical={multiline ? 'top' : 'center'}
   />
 );
 const CustomDropdown: React.FC<CustomDropdownProps> = ({
@@ -93,12 +103,12 @@ const HeroCard: React.FC<{ childName: string }> = ({ childName }) => (
   </LinearGradient>
 );
 
-const LanguageSelector: React.FC<{ selected: string; onChange: (language: string) => void }> = ({ selected, onChange }) => (
+const LanguageSelector: React.FC<{ selected: StoryLanguage; onChange: (language: StoryLanguage) => void }> = ({ selected, onChange }) => (
   <View style={styles.languageRow}>
     {[
-      { label: 'हिंदी', value: 'Hindi' },
-      { label: 'English', value: 'English' },
-      { label: 'Hinglish', value: 'Hinglish' },
+      { label: 'हिंदी', value: 'Hindi' as const },
+      { label: 'English', value: 'English' as const },
+      { label: 'Hinglish', value: 'Hinglish' as const },
     ].map((language) => (
       <Pressable
         key={language.value}
@@ -111,17 +121,18 @@ const LanguageSelector: React.FC<{ selected: string; onChange: (language: string
 );
 export const CreateStoryScreen: React.FC = () => {
   const { child, voices, createNewStory, setCurrentScreen } = useApp();
-  const [childName, setChildName] = useState(child.name);
+  const [childName, setChildName] = useState(child.name || 'Aarav');
   const [age, setAge] = useState('3 years');
-  const [language, setLanguage] = useState('Hindi');
+  const [language, setLanguage] = useState<StoryLanguage>('Hindi');
   const [topic, setTopic] = useState('');
   const [storyType, setStoryType] = useState('Bedtime adventure');
-  const [narrator, setNarrator] = useState('Mummy');
+  const defaultNarrator = voices.find((voice) => voice.isDefault) || voices[0];
+  const [narratorId, setNarratorId] = useState(defaultNarrator?.id || '');
   const [openDropdown, setOpenDropdown] = useState<'age' | 'storyType' | 'narrator' | null>(null);
 
-  const ageOptions = ['3 years', '4 years', '5 years', '6 years'];
-  const storyTypeOptions = ['Bedtime adventure', 'Funny Story', 'Moral Story', 'Learning Story'];
-  const narratorOptions = ['Mummy', 'Papa', 'Nani'];
+  const ageOptions = ['2 years', '3 years', '4 years', '5 years', '6 years'];
+  const storyTypeOptions = ['Bedtime adventure', 'Funny adventure', 'Magical adventure', 'Learning story', 'Animal adventure'];
+  const selectedNarrator = voices.find((voice) => voice.id === narratorId) || defaultNarrator;
 
   const toggleDropdown = (dropdown: 'age' | 'storyType' | 'narrator') => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -134,14 +145,17 @@ export const CreateStoryScreen: React.FC = () => {
     setOpenDropdown(null);
   };
 
-  const handleCreateStory = async () => {
-    const selectedVoice = voices.find((voice) => voice.name === narrator) || voices.find((voice) => voice.isDefault);
-    const personalizedName = childName.trim() || child.name || 'your child';
-    const title = topic.trim() ? `${personalizedName}'s ${topic.trim()}` : `${personalizedName}'s ${storyType}`;
-
+  const handleCreateStory = () => {
+    const personalizedName = childName.trim() || child.name || 'Aarav';
+    const script = topic.trim() || getFallbackScript(personalizedName, storyType, language);
     showToast(`Creating ${personalizedName}'s personalized story`);
-    await new Promise((resolve) => setTimeout(resolve, 2400));
-    await createNewStory(title, storyType, 5, selectedVoice?.id);
+    void createNewStory({
+      title: topic.trim() ? `${personalizedName}'s ${topic.trim()}` : `${personalizedName}'s ${storyType}`,
+      script,
+      language,
+      category: mapStoryTypeToCategory(storyType),
+      narratorId: selectedNarrator?.id || '',
+    });
   };
 
   return (
@@ -184,7 +198,12 @@ export const CreateStoryScreen: React.FC = () => {
 
           <View style={styles.field}>
             <FormLabel>What should the story be about?</FormLabel>
-            <CustomTextInput value={topic} placeholder="e.g. dinosaurs, moon, jungle" onChangeText={setTopic} />
+            <CustomTextInput
+              value={topic}
+              placeholder="Write the story here, e.g. dinosaurs, moon, jungle"
+              onChangeText={setTopic}
+              multiline
+            />
           </View>
 
           <View style={styles.field}>
@@ -201,11 +220,14 @@ export const CreateStoryScreen: React.FC = () => {
           <View style={styles.lastField}>
             <CustomDropdown
               label="Narrator"
-              value={narrator}
-              options={narratorOptions}
+              value={selectedNarrator ? `${selectedNarrator.avatar} ${selectedNarrator.name}` : 'Family Voice'}
+              options={voices.map((voice) => `${voice.avatar} ${voice.name}`)}
               isOpen={openDropdown === 'narrator'}
               onToggle={() => toggleDropdown('narrator')}
-              onSelect={(value) => selectDropdown(setNarrator, value)}
+              onSelect={(value) => {
+                const voice = voices.find((item) => `${item.avatar} ${item.name}` === value);
+                if (voice) selectDropdown(setNarratorId, voice.id);
+              }}
             />
           </View>
 
@@ -291,6 +313,10 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     fontWeight: '800',
     marginBottom: 8,
+  },
+  storyInput: {
+    minHeight: 120,
+    paddingTop: 12,
   },
   input: {
     minHeight: 51,

@@ -1,0 +1,19 @@
+---
+description: End-to-end testing of user flows after feature work
+alwaysApply: true
+---
+
+# End-to-end testing
+
+- Every feature change must be verified as a full user path, not a single screen in isolation.
+- Cover: happy path, empty/error states, related screens that share the same state, and reload/persist if data is saved.
+- Do not add Jest, Detox, Maestro, or other test packages unless the user asks. Confirm Expo Go compatibility first.
+- If a test runner exists, update or add tests for the flow you changed. If none exists, still run the flow manually (or in Expo web/device) before finishing.
+- Shared state must stay consistent across screens (e.g. add voice → list → preview → delete → Home narrator).
+
+Example voice flow to cover:
+
+1. Add voice (name + recording) → appears on Voices.
+2. Preview plays, stop/close actually stops audio.
+3. Data still works after app reload.
+4. Delete (with confirm) updates the list and default narrator.
