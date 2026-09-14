@@ -10,9 +10,11 @@ import {
   getVoices,
   saveStory,
   saveVoice,
+  saveVoices,
   updateStory,
   updateVoice,
 } from '../../storage';
+import { deleteVoiceRecording, persistVoiceRecording } from '../../storage/voiceAudio';
 
 type AppContextType = {
   currentScreen: RootScreen;
@@ -107,16 +109,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     getVoices().then(async (savedVoices) => {
       if (!isMounted) return;
       if (savedVoices.length > 0) {
-        setVoices((currentVoices) => {
-          const currentIds = new Set(currentVoices.map((voice) => voice.id));
-          return [...currentVoices, ...savedVoices.filter((voice) => !currentIds.has(voice.id))];
-        });
+        setVoices(savedVoices);
         return;
       }
 
-      for (const voice of initialVoices) {
-        await saveVoice(voice);
-      }
+      await saveVoices(initialVoices);
+      if (isMounted) setVoices(initialVoices);
     });
 
     return () => {
@@ -153,21 +151,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addVoice = async (name: string, languages: string[], audioUri?: string) => {
+    const id = `v_${Date.now()}`;
+    let persistedUri: string | undefined;
+    try {
+      persistedUri = audioUri ? await persistVoiceRecording(audioUri, id) : undefined;
+    } catch {
+      throw new Error('Unable to save recording');
+    }
     const newVoice: Voice = {
-      id: `v_${Date.now()}`,
+      id,
       name: name.trim(),
       languages,
       status: 'Ready',
       isDefault: false,
       avatar: '👤',
-      audioUri,
+      audioUri: persistedUri,
     };
     if (await saveVoice(newVoice)) setVoices((prev) => [...prev, newVoice]);
   };
 
   const deleteVoice = async (voiceId: string) => {
+    const voice = voices.find((item) => item.id === voiceId);
+    await deleteVoiceRecording(voice?.audioUri);
     if (await deleteStoredVoice(voiceId)) {
-      setVoices((prev) => prev.filter((voice) => voice.id !== voiceId));
+      setVoices((prev) => prev.filter((item) => item.id !== voiceId));
     }
   };
 

@@ -20,6 +20,16 @@ export const getVoices = async (): Promise<Voice[]> => {
   }
 };
 
+export const saveVoices = async (voices: Voice[]): Promise<boolean> => {
+  try {
+    await AsyncStorage.setItem(VOICES_STORAGE_KEY, JSON.stringify(voices));
+    return true;
+  } catch (error) {
+    logVoiceStorageError('save all', error);
+    return false;
+  }
+};
+
 export const saveVoice = async (voice: Voice): Promise<boolean> => {
   try {
     const voices = await getVoices();

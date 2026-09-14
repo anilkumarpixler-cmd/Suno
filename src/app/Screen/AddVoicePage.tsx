@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,46 +9,144 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import {
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  useAudioPlayer,
+  useAudioRecorder,
+  useAudioRecorderState,
+} from 'expo-audio';
 import { useApp } from '../Context/AppContext';
 import { Header } from '../components/Common/header';
 import { theme } from '../Theme/Index';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { deleteVoiceRecording } from '../../storage/voiceAudio';
 
 const LANGUAGE_OPTIONS = ['Hindi + English', 'Hindi', 'English', 'Punjabi', 'Gujarati'];
+
+const formatTime = (seconds: number) => {
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+  return `${minutes}:${remaining.toString().padStart(2, '0')}`;
+};
 
 export const AddVoiceScreen: React.FC = () => {
   const { addVoice, setCurrentScreen } = useApp();
   const [name, setName] = useState('');
   const [selectedLang, setSelectedLang] = useState('Hindi + English');
   const [isLangOpen, setIsLangOpen] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
   const [timer, setTimer] = useState(0);
   const [isRecorded, setIsRecorded] = useState(false);
+  const [recordedUri, setRecordedUri] = useState<string | null>(null);
+  const [isPreviewing, setIsPreviewing] = useState(false);
 
-  // Recording timer simulation
-  React.useEffect(() => {
-    let interval: any;
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorderState = useAudioRecorderState(recorder);
+  const player = useAudioPlayer(recordedUri ?? undefined);
+  const isRecording = recorderState.isRecording;
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | undefined;
     if (isRecording) {
-      interval = setInterval(() => setTimer((t) => t + 1), 1000);
+      interval = setInterval(() => setTimer((value) => value + 1), 1000);
     }
-    return () => clearInterval(interval);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [isRecording]);
 
-  const handleStartRecording = () => {
-    if (!name) return;
-    setIsRecording(true);
+  useEffect(() => {
+    if (recordedUri) player.replace(recordedUri);
+  }, [recordedUri]);
+
+  const stopPreview = () => {
+    player.pause();
+    player.seekTo(0);
+    setIsPreviewing(false);
+  };
+
+  const clearRecording = async () => {
+    stopPreview();
+    await deleteVoiceRecording(recordedUri ?? undefined);
+    setRecordedUri(null);
+    setIsRecorded(false);
     setTimer(0);
   };
 
-  const handleStopRecording = () => {
-    setIsRecording(false);
-    setIsRecorded(true);
+  const handleStartRecording = async () => {
+    if (!name.trim()) {
+      Alert.alert('Enter name', 'Please enter whose voice you are recording.');
+      return;
+    }
+
+    try {
+      const permission = await requestRecordingPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Microphone permission required',
+          'Please allow microphone access to record your voice.',
+        );
+        return;
+      }
+
+      await clearRecording();
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+    } catch {
+      Alert.alert('Recording error', 'Could not start recording. Please try again.');
+    }
   };
 
-  const handleSave = () => {
-    const langs = selectedLang.split(' + ');
-    addVoice(name, langs);
-    setCurrentScreen('Voices');
+  const handleStopRecording = async () => {
+    try {
+      await recorder.stop();
+      const uri = recorder.uri;
+      if (uri) {
+        setRecordedUri(uri);
+        setIsRecorded(true);
+      }
+    } catch {
+      Alert.alert('Recording error', 'Could not save the recording.');
+    }
+  };
+
+  const handleRetake = async () => {
+    await handleStartRecording();
+  };
+
+  const handlePreview = () => {
+    if (!recordedUri) {
+      Alert.alert('No recording', 'Please record your voice first.');
+      return;
+    }
+
+    if (isPreviewing) {
+      stopPreview();
+      return;
+    }
+
+    player.seekTo(0);
+    player.play();
+    setIsPreviewing(true);
+  };
+
+  const handleSave = async () => {
+    if (!name.trim()) {
+      Alert.alert('Enter name', 'Please enter a voice name.');
+      return;
+    }
+    if (!recordedUri) {
+      Alert.alert('Record your voice', 'Please record your voice before saving.');
+      return;
+    }
+
+    stopPreview();
+    try {
+      await addVoice(name, selectedLang.split(' + '), recordedUri);
+      setCurrentScreen('Voices');
+    } catch {
+      Alert.alert('Save error', 'Could not save this voice. Please try again.');
+    }
   };
 
   return (
@@ -101,24 +200,23 @@ export const AddVoiceScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Recording Section */}
         <View style={styles.recorderBox}>
           <View style={styles.micCircle}>
             <Text style={styles.micIcon}>🎙️</Text>
           </View>
           <Text style={styles.recTitle}>
-            {isRecording ? 'Recording Voice...' : 'Record your voice'}
+            {isRecording ? 'Recording Voice...' : isRecorded ? 'Voice Recorded' : 'Record your voice'}
           </Text>
           <Text style={styles.recSub}>
             Read the sample story aloud for 2–5 minutes to clone your voice tone.
           </Text>
 
-          {isRecording && <Text style={styles.timerText}>0:{timer < 10 ? '0' : ''}{timer}</Text>}
+          {isRecording && <Text style={styles.timerText}>{formatTime(timer)}</Text>}
 
           {!isRecording && !isRecorded && (
             <TouchableOpacity
-              style={[styles.recBtn, !name && styles.disabledBtn]}
-              disabled={!name}
+              style={[styles.recBtn, !name.trim() && styles.disabledBtn]}
+              disabled={!name.trim()}
               onPress={handleStartRecording}
             >
               <Text style={styles.recBtnText}>Start recording</Text>
@@ -126,15 +224,18 @@ export const AddVoiceScreen: React.FC = () => {
           )}
 
           {isRecording && (
-            <TouchableOpacity style={[styles.recBtn, { backgroundColor: '#E53E3E' }]} onPress={handleStopRecording}>
+            <TouchableOpacity style={[styles.recBtn, styles.stopBtn]} onPress={handleStopRecording}>
               <Text style={styles.recBtnText}>Stop recording</Text>
             </TouchableOpacity>
           )}
 
           {isRecorded && (
             <View style={styles.postRecRow}>
-              <TouchableOpacity style={styles.secondaryBtn} onPress={() => setIsRecorded(false)}>
+              <TouchableOpacity style={styles.secondaryBtn} onPress={handleRetake}>
                 <Text style={styles.secondaryText}>Retake</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.playBtn} onPress={handlePreview}>
+                <Text style={styles.playText}>{isPreviewing ? 'Pause' : '▶ Preview'}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
                 <Text style={styles.saveText}>Save Voice</Text>
@@ -143,7 +244,6 @@ export const AddVoiceScreen: React.FC = () => {
           )}
         </View>
 
-        {/* Privacy Card */}
         <View style={styles.privacyCard}>
           <Text style={styles.privacyTitle}>🔒 Privacy first</Text>
           <Text style={styles.privacySub}>
@@ -244,11 +344,24 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: theme.borderRadius.button,
   },
+  stopBtn: { backgroundColor: '#E53E3E' },
   disabledBtn: { opacity: 0.5 },
   recBtnText: { color: '#FFF', fontWeight: '700', fontSize: 14 },
-  postRecRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-around' },
+  postRecRow: {
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
   secondaryBtn: { padding: 12 },
   secondaryText: { color: theme.colors.textMuted, fontWeight: '600' },
+  playBtn: {
+    backgroundColor: '#EFECE6',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  playText: { color: theme.colors.textDark, fontWeight: '700' },
   saveBtn: { backgroundColor: theme.colors.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
   saveText: { color: '#FFF', fontWeight: '700' },
   privacyCard: { backgroundColor: '#FFF', padding: theme.spacing.md, borderRadius: 16 },
