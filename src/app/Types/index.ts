@@ -20,7 +20,6 @@ export interface Voice {
   id: string;
   name: string;
   languages: string[];
-  // status:string;
   status: 'Ready' | 'Processing' | 'Incomplete';
   isDefault: boolean;
   avatar: string;

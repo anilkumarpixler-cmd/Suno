@@ -60,8 +60,12 @@ export const AddVoiceScreen: React.FC = () => {
   }, [recordedUri]);
 
   const stopPreview = () => {
-    player.pause();
-    player.seekTo(0);
+    try {
+      player.pause();
+      player.seekTo(0);
+    } catch {
+      // Preview player may already be released.
+    }
     setIsPreviewing(false);
   };
 
@@ -144,8 +148,9 @@ export const AddVoiceScreen: React.FC = () => {
     try {
       await addVoice(name, selectedLang.split(' + '), recordedUri);
       setCurrentScreen('Voices');
-    } catch {
-      Alert.alert('Save error', 'Could not save this voice. Please try again.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not save this voice. Please try again.';
+      Alert.alert('Save error', message);
     }
   };
 

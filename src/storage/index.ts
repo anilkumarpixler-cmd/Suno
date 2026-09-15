@@ -9,12 +9,3 @@ export {
 } from './storyStorage';
 
 export type { Story } from '../app/Types';
-
-export {
-	VOICES_STORAGE_KEY,
-	getVoices,
-	saveVoices,
-	saveVoice,
-	updateVoice,
-	deleteVoice,
-} from './voiceStorage';

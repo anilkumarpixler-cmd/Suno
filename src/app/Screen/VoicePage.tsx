@@ -64,27 +64,8 @@ const VoiceCard: React.FC<VoiceCardProps> = ({ voice, onSetDefault, onPreviewVoi
   </View>
 );
 
-const toVoiceViewModel = (voice: {
-  id: string;
-  name: string;
-  languages: string[];
-  status: string;
-  avatar: string;
-  isDefault: boolean;
-  audioUri?:string;
-}): Voice => ({
-  id: voice.id,
-  name: voice.name,
-  languages: voice.languages,
-  status: voice.name === 'Papa' ? 'Ready' : voice.status as Voice['status'],
-  avatar: voice.name === 'Mummy' ? '👩' : voice.name === 'Papa' ? '👨' : voice.name === 'Nani' ? '👵' : voice.avatar,
-  isDefault: voice.isDefault,
-  audioUri: voice.audioUri,
-});
-
 export const FamilyVoicesScreen: React.FC = () => {
   const { voices, setDefaultVoice, setCurrentScreen, deleteVoice } = useApp();
-  const voiceCards = voices.map(toVoiceViewModel);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const player = useAudioPlayer(previewUri ?? undefined);
 
@@ -184,7 +165,7 @@ export const FamilyVoicesScreen: React.FC = () => {
             handleStopPreview={handleStopPreview}
           />
 
-        {voiceCards.map((voice) => (
+        {voices.map((voice) => (
           <VoiceCard
             key={voice.id}
             voice={voice}
@@ -327,19 +308,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   playIcon: { color: theme.colors.textDark, fontSize: 13 },
-  settingsIcon: { color: theme.colors.textDark, fontSize: 21 },
   actionText: { color: theme.colors.textDark, fontSize: 14, fontWeight: '700' },
-  defaultButton: {
-    minHeight: 51,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: theme.colors.borderLight,
-    backgroundColor: theme.colors.cardBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 18,
-  },
-  defaultButtonText: { color: theme.colors.textDark, fontSize: 14, fontWeight: '700' },
   addVoiceButton: {
     minHeight: 52,
     borderRadius: 15,
@@ -349,77 +318,4 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   addVoiceButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-  previewPlayer: {
-  width: '100%',
-  // flex:1,
-  // justifyContent:"center",
-  // alignItems:"center",
-  backgroundColor: '#FFFFFF',
-  borderRadius: 18,
-  padding: 16,
-  marginTop: 16,
-  marginBottom: 16,
-
-  // Shadow
-  shadowColor: '#000',
-  shadowOffset: {
-    width: 0,
-    height: 3,
-  },
-  shadowOpacity: 0.1,
-  shadowRadius: 6,
-  elevation: 4,
-},
-
-previewTitle: {
-  fontSize: 17,
-  fontWeight: '700',
-  color: theme.colors.textDark,
-  marginBottom: 14,
-},
-
-previewPlayButton: {
-  width: '100%',
-  backgroundColor: theme.colors.primary,
-  paddingVertical: 12,
-  borderRadius: 12,
-  alignItems: 'center',
-  justifyContent: 'center',
-  marginBottom: 10,
-},
-
-previewButtonText: {
-  color: '#FFFFFF',
-  fontSize: 14,
-  fontWeight: '700',
-},
-
-previewStopButton: {
-  width: '100%',
-  backgroundColor: '#EFECE6',
-  paddingVertical: 12,
-  borderRadius: 12,
-  alignItems: 'center',
-  justifyContent: 'center',
-  marginBottom: 10,
-},
-
-previewStopText: {
-  color: theme.colors.textDark,
-  fontSize: 14,
-  fontWeight: '700',
-},
-
-previewCloseButton: {
-  width: '100%',
-  paddingVertical: 10,
-  alignItems: 'center',
-  justifyContent: 'center',
-},
-
-previewCloseText: {
-  color: '#E53E3E',
-  fontSize: 14,
-  fontWeight: '600',
-},
 });

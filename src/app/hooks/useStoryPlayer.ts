@@ -1,15 +1,17 @@
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useEffect, useRef, useState } from 'react';
 import { RootScreen, Story, Voice } from '../Types';
+import { synthesizeStory } from '../services/sunoApi';
 import {
   estimateDuration,
-  getRemainingScript,
   languageToLocale,
   pauseSpeech,
-  pitchForVoice,
   resumeSpeech,
   speakText,
   stopSpeech,
 } from '../services/storySpeech';
+
+type PlaybackSource = 'idle' | 'preparing' | 'server' | 'device';
 
 type UseStoryPlayerArgs = {
   stories: Story[];
@@ -27,34 +29,72 @@ export const useStoryPlayer = ({
   const [activeStory, setActiveStory] = useState<Story | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(1);
+  const [playbackSource, setPlaybackSource] = useState<PlaybackSource>('idle');
+
+  const player = useAudioPlayer(null, { updateInterval: 250 });
+  const status = useAudioPlayerStatus(player);
 
   const storyRef = useRef<Story | null>(null);
   const currentTimeRef = useRef(0);
   const shouldPlayRef = useRef(false);
   const speakIdRef = useRef(0);
-  const pausedWithNativePause = useRef(false);
+  const durationRef = useRef(1);
+  const playbackSourceRef = useRef<PlaybackSource>('idle');
+
+  const setSource = (source: PlaybackSource) => {
+    playbackSourceRef.current = source;
+    setPlaybackSource(source);
+  };
 
   const setTime = (time: number) => {
     currentTimeRef.current = time;
     setCurrentTime(time);
   };
 
-  const storyDuration = (story: Story) => estimateDuration(story.script || story.title);
+  const setAudioDuration = (value: number) => {
+    const next = Math.max(1, value);
+    durationRef.current = next;
+    setDuration(next);
+  };
 
-  const resolveLocale = (story: Story) => {
+  const storyDuration = (story: Story) =>
+    durationRef.current > 1 ? durationRef.current : estimateDuration(story.script || story.title);
+
+  const resolveLanguage = (story: Story) => {
     const narrator = voices.find((voice) => voice.id === story.narratorId);
-    return languageToLocale(narrator?.languages[0] || story.language);
+    return narrator?.languages[0] || story.language || 'English';
+  };
+
+  const safePause = () => {
+    try {
+      player.pause();
+    } catch {
+      // Native player can already be released on unmount / screen change.
+    }
+  };
+
+  const safePlay = () => {
+    try {
+      player.play();
+    } catch {
+      // Native player can already be released.
+    }
   };
 
   const haltSpeech = () => {
-    speakIdRef.current += 1;
+    // speakIdRef.current += 1;
     shouldPlayRef.current = false;
-    pausedWithNativePause.current = false;
+    setSource('idle');
+    safePause();
     stopSpeech();
   };
 
-  const speakRemaining = (story: Story, time: number) => {
-    const remaining = getRemainingScript(story.script || story.title, time);
+  const speakWithDevice = (story: Story, time: number, speakId: number) => {
+    setSource('device');
+    const words = (story.script || story.title).trim().split(/\s+/).filter(Boolean);
+    const wordIndex = Math.max(0, Math.min(Math.floor(time * (22 / 10)), words.length));
+    const remaining = words.slice(wordIndex).join(' ');
     if (!remaining) {
       haltSpeech();
       setIsPlaying(false);
@@ -62,14 +102,9 @@ export const useStoryPlayer = ({
       return;
     }
 
-    const speakId = ++speakIdRef.current;
-    storyRef.current = story;
-    pausedWithNativePause.current = false;
-    stopSpeech();
-
     speakText(remaining, {
-      locale: resolveLocale(story),
-      pitch: pitchForVoice(story.narratorId),
+      locale: languageToLocale(resolveLanguage(story)),
+      pitch: 1,
       onDone: () => {
         if (speakId !== speakIdRef.current || !shouldPlayRef.current) return;
         if (storyRef.current?.id !== story.id) return;
@@ -80,11 +115,51 @@ export const useStoryPlayer = ({
     });
   };
 
+  const playServerAudio = async (story: Story, resumeAt: number, speakId: number) => {
+    try {
+      const result = await synthesizeStory(story.script || story.title, resolveLanguage(story));
+      if (speakId !== speakIdRef.current || !shouldPlayRef.current) return;
+
+      setSource('server');
+      setAudioDuration(result.duration);
+      const start =
+        resumeAt > 0.4 && resumeAt < result.duration - 0.5
+          ? resumeAt
+          : 0;
+      setTime(start);
+      player.replace(result.audioUrl);
+      if (start > 0.4) {
+        try {
+          await player.seekTo(start);
+        } catch {
+          // ignore
+        }
+      }
+      if (shouldPlayRef.current && speakId === speakIdRef.current) safePlay();
+    } catch {
+      if (speakId !== speakIdRef.current) return;
+      setAudioDuration(estimateDuration(story.script || story.title));
+      speakWithDevice(story, resumeAt, speakId);
+    }
+  };
+
+  const speakRemaining = (story: Story, time: number) => {
+    const speakId = ++speakIdRef.current;
+    storyRef.current = story;
+    setSource('preparing');
+    setTime(0);
+    stopSpeech();
+    safePause();
+    void playServerAudio(story, time, speakId);
+  };
+
   const playStory = (story: Story, autoPlay = true) => {
-    const startTime = Math.min(story.progress || 0, storyDuration(story));
+    const estimated = estimateDuration(story.script || story.title);
+    setAudioDuration(story.duration || estimated);
+    const startTime = Math.min(story.progress || 0, estimated);
     storyRef.current = story;
     setActiveStory(story);
-    setTime(startTime);
+    setTime(0);
     setCurrentScreen('NowPlaying');
 
     if (!autoPlay) {
@@ -99,13 +174,16 @@ export const useStoryPlayer = ({
   };
 
   const togglePlayPause = async () => {
-    if (!activeStory) return;
+    if (!activeStory || playbackSourceRef.current === 'preparing') return;
 
     if (isPlaying) {
       shouldPlayRef.current = false;
       setIsPlaying(false);
+      if (playbackSourceRef.current === 'server') {
+        safePause();
+        return;
+      }
       const result = await pauseSpeech();
-      pausedWithNativePause.current = result === 'paused';
       if (result === 'stopped') speakIdRef.current += 1;
       return;
     }
@@ -113,24 +191,45 @@ export const useStoryPlayer = ({
     shouldPlayRef.current = true;
     setIsPlaying(true);
 
-    if (pausedWithNativePause.current) {
-      const result = await resumeSpeech();
-      if (result === 'resumed') return;
+    if (playbackSourceRef.current === 'server') {
+      const ended = currentTimeRef.current >= durationRef.current - 0.25;
+      if (ended) {
+        setTime(0);
+        try {
+          await player.seekTo(0);
+        } catch {
+          // ignore
+        }
+      }
+      safePlay();
+      return;
     }
 
-    const duration = storyDuration(activeStory);
-    const ended = currentTimeRef.current >= duration;
+    const result = await resumeSpeech();
+    if (result === 'resumed') return;
+
+    const estimated = storyDuration(activeStory);
+    const ended = currentTimeRef.current >= estimated;
     const resumeAt = ended ? 0 : currentTimeRef.current;
     if (ended) setTime(0);
     speakRemaining(activeStory, resumeAt);
   };
 
   const seekTo = (time: number) => {
-    if (!activeStory) return;
+    if (!activeStory || playbackSourceRef.current === 'preparing') return;
 
     const nextTime = Math.max(0, Math.min(time, storyDuration(activeStory)));
-    pausedWithNativePause.current = false;
     setTime(nextTime);
+
+    if (playbackSourceRef.current === 'server') {
+      void player.seekTo(nextTime);
+      if (shouldPlayRef.current || isPlaying) {
+        shouldPlayRef.current = true;
+        setIsPlaying(true);
+        safePlay();
+      }
+      return;
+    }
 
     if (shouldPlayRef.current || isPlaying) {
       shouldPlayRef.current = true;
@@ -153,10 +252,15 @@ export const useStoryPlayer = ({
   const playPreviousStory = () => {
     if (!activeStory || stories.length === 0) return;
 
-    if (currentTimeRef.current > 3) {
+    if (currentTimeRef.current > 3 && playbackSourceRef.current !== 'preparing') {
       shouldPlayRef.current = true;
       setIsPlaying(true);
       setTime(0);
+      if (playbackSourceRef.current === 'server') {
+        void player.seekTo(0);
+        safePlay();
+        return;
+      }
       speakRemaining(activeStory, 0);
       return;
     }
@@ -175,22 +279,37 @@ export const useStoryPlayer = ({
   };
 
   useEffect(() => {
-    if (!isPlaying || !activeStory) return;
+    if (playbackSource !== 'server') return;
+    if (typeof status.currentTime === 'number') setTime(status.currentTime);
+    if (typeof status.duration === 'number' && status.duration > 0) {
+      setAudioDuration(status.duration);
+    }
+  }, [playbackSource, status.currentTime, status.duration]);
 
-    const duration = storyDuration(activeStory);
+  useEffect(() => {
+    if (playbackSource !== 'server' || !status.didJustFinish) return;
+    shouldPlayRef.current = false;
+    setIsPlaying(false);
+    setTime(durationRef.current);
+  }, [playbackSource, status.didJustFinish]);
+
+  useEffect(() => {
+    if (playbackSource !== 'device' || !isPlaying || !activeStory) return;
+
+    const total = storyDuration(activeStory);
     const interval = setInterval(() => {
       const nextTime = currentTimeRef.current + 1;
-      if (nextTime >= duration) {
+      if (nextTime >= total) {
         haltSpeech();
         setIsPlaying(false);
-        setTime(duration);
+        setTime(total);
         return;
       }
       setTime(nextTime);
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isPlaying, activeStory]);
+  }, [playbackSource, isPlaying, activeStory]);
 
   useEffect(() => {
     if (currentScreen === 'NowPlaying') return;
@@ -206,7 +325,9 @@ export const useStoryPlayer = ({
     activeStory,
     setActiveStory,
     isPlaying,
+    isPreparingAudio: playbackSource === 'preparing',
     currentTime,
+    duration,
     playStory,
     togglePlayPause,
     seekTo,

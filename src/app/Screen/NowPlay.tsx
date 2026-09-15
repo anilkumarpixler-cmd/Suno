@@ -1,26 +1,27 @@
-import React from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import { ActivityIndicator, View, StyleSheet, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../Context/AppContext';
 import { Header } from '../components/Common/header';
 import { theme } from '../Theme/Index';
-import { estimateDuration } from '../services/storySpeech';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface NarratorCardProps {
   avatar: string;
+  name: string;
+  languages: string;
 }
 
-export const NarratorCard: React.FC<NarratorCardProps> = ({ avatar }) => (
+export const NarratorCard: React.FC<NarratorCardProps> = ({ avatar, name, languages }) => (
   <View style={styles.narratorCard}>
     <View style={styles.narratorAvatarCircle}>
       <Text style={styles.avatar}>{avatar}</Text>
     </View>
     <View style={styles.narratorDetails}>
-      <Text style={styles.narratorName}>Mummy</Text>
-      <Text style={styles.languages}>Hindi · My voice</Text>
+      <Text style={styles.narratorName}>{name}</Text>
+      <Text style={styles.languages}>{languages}</Text>
     </View>
-    <View style={styles.selectedIndicator} accessibilityLabel="Mummy selected">
+    <View style={styles.selectedIndicator} accessibilityLabel={`${name} selected`}>
       <Text style={styles.check}>✓</Text>
     </View>
   </View>
@@ -30,6 +31,7 @@ export const NowPlayingScreen: React.FC = () => {
   const {
     activeStory,
     isPlaying,
+    isPreparingAudio,
     currentTime,
     togglePlayPause,
     seekTo,
@@ -38,8 +40,10 @@ export const NowPlayingScreen: React.FC = () => {
     playPreviousStory,
     toggleFavorite,
     voices,
+    duration: trackDuration,
     setCurrentScreen,
   } = useApp();
+  const [barWidth, setBarWidth] = useState(1);
 
   if (!activeStory) return null;
 
@@ -50,7 +54,7 @@ export const NowPlayingScreen: React.FC = () => {
     const s = Math.floor(seconds % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
-  const duration = estimateDuration(activeStory.script || activeStory.title);
+  const duration = Math.max(1, trackDuration || activeStory.duration || 1);
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
@@ -82,13 +86,14 @@ export const NowPlayingScreen: React.FC = () => {
           <TouchableOpacity
             style={styles.sliderBg}
             activeOpacity={1}
+            disabled={isPreparingAudio}
+            onLayout={(event) => setBarWidth(event.nativeEvent.layout.width)}
             onPress={(e) => {
-              const clickX = e.nativeEvent.locationX;
-              const newPct = clickX / 280; // approximate width
-              seekTo(newPct * duration);
+              if (barWidth <= 0) return;
+              seekTo((e.nativeEvent.locationX / barWidth) * duration);
             }}
           >
-            <View style={[styles.sliderFill, { width: `${progressPct}%` }]} />
+            <View style={[styles.sliderFill, { width: `${Math.min(100, Math.max(0, progressPct))}%` }]} />
           </TouchableOpacity>
 
           <View style={styles.timeRow}>
@@ -96,7 +101,7 @@ export const NowPlayingScreen: React.FC = () => {
             <Text style={styles.timeText}>{formatTime(duration)}</Text>
           </View>
 
-          <View style={styles.controlsRow}>
+          <View style={styles.controlsRow} pointerEvents={isPreparingAudio ? 'none' : 'auto'}>
             <TouchableOpacity onPress={playPreviousStory} accessibilityLabel="Previous story">
               <Text style={styles.ctrlIcon}>⏮</Text>
             </TouchableOpacity>
@@ -104,7 +109,7 @@ export const NowPlayingScreen: React.FC = () => {
               <Text style={styles.ctrlIcon}>⏪</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.mainPlayBtn} onPress={togglePlayPause}>
-              <Text style={styles.mainPlayIcon}>{isPlaying ? '⏸' : '▶'}</Text>
+            <Text style={styles.mainPlayIcon}>{isPreparingAudio ? '…' : isPlaying ? '⏸' : '▶'}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => skipTime(10)}>
               <Text style={styles.ctrlIcon}>⏩</Text>
@@ -113,12 +118,26 @@ export const NowPlayingScreen: React.FC = () => {
               <Text style={styles.ctrlIcon}>⏭</Text>
             </TouchableOpacity>
           </View>
+
+          {isPreparingAudio && (
+            <View style={styles.loaderOverlay} pointerEvents="auto">
+              <View style={styles.loaderOrb}>
+                <ActivityIndicator size="large" color="#FFFFFF" />
+              </View>
+              <Text style={styles.loaderTitle}>Preparing your story</Text>
+              <Text style={styles.loaderSubtitle}>A warm voice is on the way…</Text>
+            </View>
+          )}
         </View>
 
         {/* Narrator Section */}
         <View style={styles.narratorSection}>
           <Text style={styles.narratorHeader}>Narrated by</Text>
-          <NarratorCard avatar={narrator?.avatar || '👩🏽'} />
+          <NarratorCard
+            avatar={narrator?.avatar || '👤'}
+            name={narrator?.name || 'Narrator'}
+            languages={(narrator?.languages || []).join(' · ') || 'Family voice'}
+          />
           <TouchableOpacity
             style={styles.changeNarratorButton}
             onPress={() => setCurrentScreen('Voices')}
@@ -143,6 +162,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.card,
     padding: theme.spacing.lg,
     alignItems: 'center',
+    overflow: 'hidden',
   },
   artBox: {
     width: 180,
@@ -176,6 +196,39 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   mainPlayIcon: { color: '#FFFFFF', fontSize: 24 },
+  loaderOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(24, 24, 41, 0.82)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  loaderOrb: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+    shadowColor: theme.colors.primary,
+    shadowOpacity: 0.55,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
+  },
+  loaderTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  loaderSubtitle: {
+    color: '#C5C0E0',
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+  },
   narratorSection: { marginTop: theme.spacing.lg },
   narratorHeader: { fontSize: 19, fontWeight: '800', color: theme.colors.textDark, marginBottom: theme.spacing.sm },
   narratorCard: {

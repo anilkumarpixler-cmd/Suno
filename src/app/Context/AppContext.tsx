@@ -5,16 +5,12 @@ import { initialChild, initialStories, initialVoices } from '../Data/mockData';
 import { useStoryPlayer } from '../hooks/useStoryPlayer';
 import { estimateDuration, normalizeStory } from '../services/storySpeech';
 import {
-  deleteVoice as deleteStoredVoice,
-  getStories,
-  getVoices,
-  saveStory,
-  saveVoice,
-  saveVoices,
-  updateStory,
-  updateVoice,
-} from '../../storage';
-import { deleteVoiceRecording, persistVoiceRecording } from '../../storage/voiceAudio';
+  deleteVoiceOnServer,
+  fetchVoices,
+  setDefaultVoiceOnServer,
+  uploadVoice,
+} from '../services/sunoApi';
+import { getStories, saveStory, updateStory } from '../../storage';
 
 type AppContextType = {
   currentScreen: RootScreen;
@@ -25,7 +21,9 @@ type AppContextType = {
   activeStory: Story | null;
   lastPlayedStoryId: string | null;
   isPlaying: boolean;
+  isPreparingAudio: boolean;
   currentTime: number;
+  duration: number;
   playStory: (story: Story, autoPlay?: boolean) => void;
   togglePlayPause: () => void;
   seekTo: (time: number) => void;
@@ -71,7 +69,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     activeStory,
     setActiveStory,
     isPlaying,
+    isPreparingAudio,
     currentTime,
+    duration,
     playStory,
     togglePlayPause,
     seekTo,
@@ -106,16 +106,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     let isMounted = true;
 
-    getVoices().then(async (savedVoices) => {
-      if (!isMounted) return;
-      if (savedVoices.length > 0) {
-        setVoices(savedVoices);
-        return;
-      }
-
-      await saveVoices(initialVoices);
-      if (isMounted) setVoices(initialVoices);
-    });
+    fetchVoices()
+      .then((remote) => {
+        if (isMounted && remote.length > 0) setVoices(remote);
+      })
+      .catch(() => {
+        if (isMounted) setVoices(initialVoices);
+      });
 
     return () => {
       isMounted = false;
@@ -127,7 +124,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [activeStory?.id]);
 
   useEffect(() => {
-    if (!activeStory) return;
+    if (!activeStory || isPreparingAudio) return;
     const storyId = activeStory.id;
     const time = currentTime;
     setStories((prev) =>
@@ -137,45 +134,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       void updateStory(storyId, { progress: time });
     }, 800);
     return () => clearTimeout(timeout);
-  }, [currentTime, activeStory?.id]);
+  }, [currentTime, activeStory?.id, isPreparingAudio]);
 
   const setDefaultVoice = (voiceId: string) => {
-    void updateVoice(voiceId, { isDefault: true });
+    void setDefaultVoiceOnServer(voiceId).catch(() => undefined);
     setVoices((prev) =>
-      prev.map((voice) => {
-        const isDefault = voice.id === voiceId;
-        if (voice.isDefault && !isDefault) void updateVoice(voice.id, { isDefault: false });
-        return { ...voice, isDefault };
-      })
+      prev.map((voice) => ({ ...voice, isDefault: voice.id === voiceId }))
     );
   };
 
   const addVoice = async (name: string, languages: string[], audioUri?: string) => {
-    const id = `v_${Date.now()}`;
-    let persistedUri: string | undefined;
-    try {
-      persistedUri = audioUri ? await persistVoiceRecording(audioUri, id) : undefined;
-    } catch {
-      throw new Error('Unable to save recording');
-    }
-    const newVoice: Voice = {
-      id,
-      name: name.trim(),
-      languages,
-      status: 'Ready',
-      isDefault: false,
-      avatar: '👤',
-      audioUri: persistedUri,
-    };
-    if (await saveVoice(newVoice)) setVoices((prev) => [...prev, newVoice]);
+    if (!audioUri) throw new Error('Unable to save recording');
+    const created = await uploadVoice(name.trim(), languages, audioUri);
+    setVoices((prev) => [...prev.filter((voice) => voice.id !== created.id), created]);
   };
 
   const deleteVoice = async (voiceId: string) => {
-    const voice = voices.find((item) => item.id === voiceId);
-    await deleteVoiceRecording(voice?.audioUri);
-    if (await deleteStoredVoice(voiceId)) {
-      setVoices((prev) => prev.filter((item) => item.id !== voiceId));
-    }
+    await deleteVoiceOnServer(voiceId);
+    setVoices((prev) => prev.filter((item) => item.id !== voiceId));
   };
 
   const toggleFavorite = (storyId: string) => {
@@ -243,7 +219,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activeStory,
         lastPlayedStoryId,
         isPlaying,
+        isPreparingAudio,
         currentTime,
+        duration,
         playStory,
         togglePlayPause,
         seekTo,
