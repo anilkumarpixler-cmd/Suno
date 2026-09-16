@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, View, StyleSheet, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../Context/AppContext';
 import { Header } from '../components/Common/header';
@@ -42,12 +42,13 @@ export const NowPlayingScreen: React.FC = () => {
     voices,
     duration: trackDuration,
     setCurrentScreen,
+    openNarratorPicker,
   } = useApp();
   const [barWidth, setBarWidth] = useState(1);
 
   if (!activeStory) return null;
 
-  const narrator = voices.find((v) => v.id === activeStory.narratorId) || voices[0];
+  const narrator = voices.find((v) => v.id === activeStory.narratorId);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -86,7 +87,6 @@ export const NowPlayingScreen: React.FC = () => {
           <TouchableOpacity
             style={styles.sliderBg}
             activeOpacity={1}
-            disabled={isPreparingAudio}
             onLayout={(event) => setBarWidth(event.nativeEvent.layout.width)}
             onPress={(e) => {
               if (barWidth <= 0) return;
@@ -101,15 +101,15 @@ export const NowPlayingScreen: React.FC = () => {
             <Text style={styles.timeText}>{formatTime(duration)}</Text>
           </View>
 
-          <View style={styles.controlsRow} pointerEvents={isPreparingAudio ? 'none' : 'auto'}>
+          <View style={styles.controlsRow}>
             <TouchableOpacity onPress={playPreviousStory} accessibilityLabel="Previous story">
               <Text style={styles.ctrlIcon}>⏮</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => skipTime(-10)}>
               <Text style={styles.ctrlIcon}>⏪</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.mainPlayBtn} onPress={togglePlayPause}>
-            <Text style={styles.mainPlayIcon}>{isPreparingAudio ? '…' : isPlaying ? '⏸' : '▶'}</Text>
+            <TouchableOpacity style={styles.mainPlayBtn} onPress={togglePlayPause} disabled={isPreparingAudio}>
+              <Text style={styles.mainPlayIcon}>{isPreparingAudio ? '…' : isPlaying ? '⏸' : '▶'}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => skipTime(10)}>
               <Text style={styles.ctrlIcon}>⏩</Text>
@@ -118,16 +118,6 @@ export const NowPlayingScreen: React.FC = () => {
               <Text style={styles.ctrlIcon}>⏭</Text>
             </TouchableOpacity>
           </View>
-
-          {isPreparingAudio && (
-            <View style={styles.loaderOverlay} pointerEvents="auto">
-              <View style={styles.loaderOrb}>
-                <ActivityIndicator size="large" color="#FFFFFF" />
-              </View>
-              <Text style={styles.loaderTitle}>Preparing your story</Text>
-              <Text style={styles.loaderSubtitle}>A warm voice is on the way…</Text>
-            </View>
-          )}
         </View>
 
         {/* Narrator Section */}
@@ -135,12 +125,12 @@ export const NowPlayingScreen: React.FC = () => {
           <Text style={styles.narratorHeader}>Narrated by</Text>
           <NarratorCard
             avatar={narrator?.avatar || '👤'}
-            name={narrator?.name || 'Narrator'}
-            languages={(narrator?.languages || []).join(' · ') || 'Family voice'}
+            name={narrator?.name || 'System Voice'}
+            languages={(narrator?.languages || []).join(' · ') || 'Device speech'}
           />
           <TouchableOpacity
             style={styles.changeNarratorButton}
-            onPress={() => setCurrentScreen('Voices')}
+            onPress={() => openNarratorPicker(activeStory.id)}
             accessibilityRole="button"
             accessibilityLabel="Change narrator">
             <Text style={styles.changeNarratorText}> Change narrator</Text>
@@ -173,8 +163,8 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   artEmoji: { fontSize: 80 },
-  title: { fontSize: 20, fontWeight: '700', color: '#FFFFFF', textAlign: 'center' },
-  subtitle: { fontSize: 13, color: '#A0AEC0', marginTop: 4, marginBottom: theme.spacing.md },
+  title: { ...theme.typography.hero, fontSize: 24, lineHeight: 30, color: '#FFFFFF', textAlign: 'center' },
+  subtitle: { ...theme.typography.body, color: '#A0AEC0', marginTop: 4, marginBottom: theme.spacing.md },
   sliderBg: { width: '100%', height: 6, backgroundColor: '#32324D', borderRadius: 3, overflow: 'hidden' },
   sliderFill: { height: '100%', backgroundColor: theme.colors.primary },
   timeRow: {
@@ -184,7 +174,7 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.xs,
     marginBottom: theme.spacing.md,
   },
-  timeText: { fontSize: 12, color: '#A0AEC0' },
+  timeText: { ...theme.typography.caption, color: '#A0AEC0' },
   controlsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '80%' },
   ctrlIcon: { fontSize: 22, color: '#FFFFFF' },
   mainPlayBtn: {
@@ -196,41 +186,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   mainPlayIcon: { color: '#FFFFFF', fontSize: 24 },
-  loaderOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(24, 24, 41, 0.82)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  loaderOrb: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: theme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 18,
-    shadowColor: theme.colors.primary,
-    shadowOpacity: 0.55,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 10,
-  },
-  loaderTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  loaderSubtitle: {
-    color: '#C5C0E0',
-    fontSize: 14,
-    marginTop: 8,
-    textAlign: 'center',
-  },
   narratorSection: { marginTop: theme.spacing.lg },
-  narratorHeader: { fontSize: 19, fontWeight: '800', color: theme.colors.textDark, marginBottom: theme.spacing.sm },
+  narratorHeader: { ...theme.typography.section, color: theme.colors.textDark, marginBottom: theme.spacing.sm },
   narratorCard: {
     backgroundColor: theme.colors.cardBg,
     borderColor: theme.colors.borderLight,
@@ -252,8 +209,8 @@ const styles = StyleSheet.create({
   },
   avatar: { fontSize: 27 },
   narratorDetails: { flex: 1 },
-  narratorName: { fontSize: 16, fontWeight: '700', color: theme.colors.textDark },
-  languages: { fontSize: 13, color: '#746C88', marginTop: 4 },
+  narratorName: { ...theme.typography.cardTitle, color: theme.colors.textDark },
+  languages: { ...theme.typography.body, color: '#746C88', marginTop: 4 },
   selectedIndicator: {
     width: 26,
     height: 26,
@@ -273,5 +230,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  changeNarratorText: { color: theme.colors.textDark, fontSize: 16, fontWeight: '700' },
+  changeNarratorText: { ...theme.typography.section, color: theme.colors.textDark },
 });

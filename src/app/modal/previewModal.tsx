@@ -6,6 +6,7 @@ import {
   Modal,
   StyleSheet,
 } from 'react-native';
+import { theme } from '../Theme/Index';
 
 
 export const PreviewModal=({handlePlayPreview,handleStopPreview,previewUri,setPreviewUri}:any)=>{
@@ -84,8 +85,9 @@ previewPlayer: {
 },
 
 previewTitle: {
-  fontSize: 22,
-  fontWeight: '700',
+  ...theme.typography.hero,
+  fontSize: 24,
+  lineHeight: 30,
   marginBottom: 20,
 },
 
@@ -99,9 +101,8 @@ previewPlayButton: {
 },
 
 previewButtonText: {
+  ...theme.typography.section,
   color: '#fff',
-  fontSize: 16,
-  fontWeight: '600',
 },
 
 previewStopButton: {
@@ -114,9 +115,8 @@ previewStopButton: {
 },
 
 previewStopText: {
+  ...theme.typography.section,
   color: '#000',
-  fontSize: 16,
-  fontWeight: '600',
 },
 
 previewCloseButton: {
@@ -125,7 +125,7 @@ previewCloseButton: {
 },
 
 previewCloseText: {
-  fontSize: 15,
+  ...theme.typography.body,
   color: '#666',
 },
 })

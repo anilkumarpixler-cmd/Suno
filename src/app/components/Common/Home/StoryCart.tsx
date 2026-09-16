@@ -40,7 +40,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({
 
         <View style={styles.metaRow}>
           <Text style={styles.metaText}>
-            {Math.floor(story.duration / 60)} mins • {narrator ? narrator.name : 'Family Voice'}
+            {Math.floor(story.duration / 60)} mins • {narrator ? narrator.name : 'System Voice'}
           </Text>
         </View>
 
@@ -81,12 +81,11 @@ const styles = StyleSheet.create({
     marginRight: theme.spacing.xs,
   },
   title: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...theme.typography.cardTitle,
     color: theme.colors.textDark,
   },
   description: {
-    fontSize: 12,
+    ...theme.typography.body,
     color: theme.colors.textMuted,
     marginVertical: 2,
   },
@@ -94,8 +93,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   metaText: {
-    fontSize: 11,
-    fontWeight: '600',
+    ...theme.typography.badge,
     color: theme.colors.primary,
   },
 });

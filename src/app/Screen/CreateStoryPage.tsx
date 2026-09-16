@@ -124,15 +124,15 @@ export const CreateStoryScreen: React.FC = () => {
   const [childName, setChildName] = useState(child.name || 'Aarav');
   const [age, setAge] = useState('3 years');
   const [language, setLanguage] = useState<StoryLanguage>('Hindi');
+  const [title, setTitle] = useState('');
   const [topic, setTopic] = useState('');
   const [storyType, setStoryType] = useState('Bedtime adventure');
-  const defaultNarrator = voices.find((voice) => voice.isDefault) || voices[0];
-  const [narratorId, setNarratorId] = useState(defaultNarrator?.id || '');
+  const [narratorId, setNarratorId] = useState('');
   const [openDropdown, setOpenDropdown] = useState<'age' | 'storyType' | 'narrator' | null>(null);
 
   const ageOptions = ['2 years', '3 years', '4 years', '5 years', '6 years'];
   const storyTypeOptions = ['Bedtime adventure', 'Funny adventure', 'Magical adventure', 'Learning story', 'Animal adventure'];
-  const selectedNarrator = voices.find((voice) => voice.id === narratorId) || defaultNarrator;
+  const selectedNarrator = voices.find((voice) => voice.id === narratorId);
 
   const toggleDropdown = (dropdown: 'age' | 'storyType' | 'narrator') => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -146,15 +146,27 @@ export const CreateStoryScreen: React.FC = () => {
   };
 
   const handleCreateStory = () => {
+    const storyTitle = title.trim();
+    if (!storyTitle) {
+      showToast('Add a story title');
+      return;
+    }
+
     const personalizedName = childName.trim() || child.name || 'Aarav';
     const script = topic.trim() || getFallbackScript(personalizedName, storyType, language);
-    showToast(`Creating ${personalizedName}'s personalized story`);
+    if (!script) {
+      showToast('Write what the story is about');
+      return;
+    }
+
     void createNewStory({
-      title: topic.trim() ? `${personalizedName}'s ${topic.trim()}` : `${personalizedName}'s ${storyType}`,
+      title: storyTitle,
       script,
       language,
       category: mapStoryTypeToCategory(storyType),
-      narratorId: selectedNarrator?.id || '',
+      narratorId,
+    }).catch((error: unknown) => {
+      showToast(error instanceof Error ? error.message : 'Could not save story');
     });
   };
 
@@ -197,6 +209,15 @@ export const CreateStoryScreen: React.FC = () => {
           </View>
 
           <View style={styles.field}>
+            <FormLabel>Story title</FormLabel>
+            <CustomTextInput
+              value={title}
+              placeholder="e.g. Aarav and the Moon"
+              onChangeText={setTitle}
+            />
+          </View>
+
+          <View style={styles.field}>
             <FormLabel>What should the story be about?</FormLabel>
             <CustomTextInput
               value={topic}
@@ -220,11 +241,15 @@ export const CreateStoryScreen: React.FC = () => {
           <View style={styles.lastField}>
             <CustomDropdown
               label="Narrator"
-              value={selectedNarrator ? `${selectedNarrator.avatar} ${selectedNarrator.name}` : 'Family Voice'}
-              options={voices.map((voice) => `${voice.avatar} ${voice.name}`)}
+              value={selectedNarrator ? `${selectedNarrator.avatar} ${selectedNarrator.name}` : 'System Voice'}
+              options={['System Voice', ...voices.map((voice) => `${voice.avatar} ${voice.name}`)]}
               isOpen={openDropdown === 'narrator'}
               onToggle={() => toggleDropdown('narrator')}
               onSelect={(value) => {
+                if (value === 'System Voice') {
+                  selectDropdown(setNarratorId, '');
+                  return;
+                }
                 const voice = voices.find((item) => `${item.avatar} ${item.name}` === value);
                 if (voice) selectDropdown(setNarratorId, voice.id);
               }}
@@ -271,8 +296,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: theme.colors.textDark,
-    fontSize: 18,
-    fontWeight: '800',
+    ...theme.typography.cardTitle,
   },
   headerSpacer: { width: 36 },
   content: {
@@ -289,15 +313,12 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     color: theme.colors.textDark,
-    fontSize: 28,
-    lineHeight: 32,
-    fontWeight: '800',
+    ...theme.typography.hero,
     marginBottom: 12,
   },
   heroDescription: {
+    ...theme.typography.body,
     color: theme.colors.textMuted,
-    fontSize: 15.5,
-    lineHeight: 22,
   },
   formCard: {
     backgroundColor: theme.colors.cardBg,
@@ -309,9 +330,8 @@ const styles = StyleSheet.create({
   field: { marginBottom: 18 },
   lastField: { marginBottom: 1 },
   label: {
+    ...theme.typography.section,
     color: theme.colors.textDark,
-    fontSize: 13.5,
-    fontWeight: '800',
     marginBottom: 8,
   },
   storyInput: {
@@ -327,12 +347,12 @@ const styles = StyleSheet.create({
     color: theme.colors.textDark,
     paddingHorizontal: 14,
     paddingVertical: 13,
-    fontSize: 16,
+    ...theme.typography.body,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  inputText: { color: theme.colors.textDark, fontSize: 16 },
+  inputText: { ...theme.typography.body, color: theme.colors.textDark },
   dropdownField: {
     minHeight: 52,
     borderColor: theme.colors.borderLight,
@@ -372,9 +392,8 @@ const styles = StyleSheet.create({
   },
   selectedLanguageText: { color: '#FFFFFF' },
   languageText: {
+    ...theme.typography.badge,
     color: theme.colors.textDark,
-    fontSize: 14,
-    fontWeight: '800',
   },
   inlineOptions: {
     backgroundColor: theme.colors.cardBg,
@@ -392,8 +411,8 @@ const styles = StyleSheet.create({
   },
   selectedOption: { backgroundColor: theme.colors.purpleLightBg },
   optionText: {
+    ...theme.typography.body,
     color: theme.colors.textDark,
-    fontSize: 16,
   },
   createButton: {
     minHeight: 52,
@@ -404,9 +423,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   createButtonText: {
+    ...theme.typography.section,
     color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
   },
   loaderContainer: {
     flex: 1,

@@ -11,12 +11,19 @@ import { PreviewModal } from '../modal/previewModal';
 
 interface VoiceCardProps {
   voice: Voice;
+  isSelected: boolean;
   onSetDefault: (voiceId: string) => void;
   onPreviewVoice: (voice: Voice) => void;
   onDeleteVoice: (voiceId: string) => void;
 }
 
-const VoiceCard: React.FC<VoiceCardProps> = ({ voice, onSetDefault, onPreviewVoice, onDeleteVoice }) => (
+const VoiceCard: React.FC<VoiceCardProps> = ({
+  voice,
+  isSelected,
+  onSetDefault,
+  onPreviewVoice,
+  onDeleteVoice,
+}) => (
   <View style={styles.voiceCard}>
     <View style={styles.voiceTopRow}>
       <View style={styles.avatarCircle}>
@@ -25,11 +32,11 @@ const VoiceCard: React.FC<VoiceCardProps> = ({ voice, onSetDefault, onPreviewVoi
       <View style={styles.voiceDetails}>
         <Text style={styles.voiceName}>{voice.name}</Text>
         <Text style={styles.metaText}>
-          {voice.languages.join(' · ')} · {voice.isDefault ? 'Default' : voice.status}
+          {voice.languages.join(' · ')} · {isSelected ? 'Default' : voice.status}
         </Text>
       </View>
-      {voice.isDefault && (
-        <View style={styles.defaultStatus} accessibilityLabel="Current default voice">
+      {isSelected && (
+        <View style={styles.defaultStatus} accessibilityLabel={`${voice.name} selected`}>
           <Text style={styles.checkMark}>✓</Text>
         </View>
       )}
@@ -44,15 +51,13 @@ const VoiceCard: React.FC<VoiceCardProps> = ({ voice, onSetDefault, onPreviewVoi
         <Text style={styles.playIcon}>▶</Text>
         <Text style={styles.actionText}>Preview</Text>
       </Pressable>
-      {!voice.isDefault && (
-        <Pressable
-          style={styles.actionButton}
-          onPress={() => onSetDefault(voice.id)}
-          accessibilityRole="button"
-          accessibilityLabel={`Set ${voice.name} as default`}>
-          <Text style={styles.actionText}>Default</Text>
-        </Pressable>
-      )}
+      <Pressable
+        style={styles.actionButton}
+        onPress={() => onSetDefault(voice.id)}
+        accessibilityRole="button"
+        accessibilityLabel={`Set ${voice.name} as default`}>
+        <Text style={styles.actionText}>Default</Text>
+      </Pressable>
       <Pressable
         style={styles.actionButton}
         onPress={() => onDeleteVoice(voice.id)}
@@ -65,7 +70,21 @@ const VoiceCard: React.FC<VoiceCardProps> = ({ voice, onSetDefault, onPreviewVoi
 );
 
 export const FamilyVoicesScreen: React.FC = () => {
-  const { voices, setDefaultVoice, setCurrentScreen, deleteVoice } = useApp();
+  const {
+    voices,
+    stories,
+    activeStory,
+    setDefaultVoice,
+    setCurrentScreen,
+    deleteVoice,
+    narratorPickerStoryId,
+    changeNarrator,
+  } = useApp();
+  const isPicker = Boolean(narratorPickerStoryId);
+  const selectedVoiceId = isPicker
+    ? stories.find((story) => story.id === narratorPickerStoryId)?.narratorId ||
+      (activeStory?.id === narratorPickerStoryId ? activeStory.narratorId : undefined)
+    : voices.find((voice) => voice.isDefault)?.id;
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const player = useAudioPlayer(previewUri ?? undefined);
 
@@ -79,9 +98,18 @@ export const FamilyVoicesScreen: React.FC = () => {
 
   const handleSetDefault = (voiceId: string) => {
     const voice = voices.find((item) => item.id === voiceId);
-    if (!voice || voice.isDefault) return;
+    if (!voice) return;
 
-    setDefaultVoice(voiceId);
+    if (!voice.isDefault) setDefaultVoice(voiceId);
+
+    if (narratorPickerStoryId) {
+      changeNarrator(narratorPickerStoryId, voiceId);
+      showToast(`${voice.name} is now narrating`);
+      setCurrentScreen('NowPlaying');
+      return;
+    }
+
+    if (voice.isDefault) return;
     showToast(`${voice.name} is now your default narrator`);
   };
 
@@ -124,7 +152,7 @@ export const FamilyVoicesScreen: React.FC = () => {
       <View style={styles.header}>
         <Pressable
           style={styles.backButton}
-          onPress={() => setCurrentScreen('Home')}
+          onPress={() => setCurrentScreen(isPicker ? 'NowPlaying' : 'Home')}
           accessibilityRole="button"
           accessibilityLabel="Go back">
           <Text style={styles.backIcon}>‹</Text>
@@ -169,6 +197,7 @@ export const FamilyVoicesScreen: React.FC = () => {
           <VoiceCard
             key={voice.id}
             voice={voice}
+            isSelected={voice.id === selectedVoiceId}
             onSetDefault={handleSetDefault}
             onPreviewVoice={handlePreviewVoice}
             onDeleteVoice={handleDeleteVoice}
@@ -219,8 +248,7 @@ const styles = StyleSheet.create({
     right: 0,
     textAlign: 'center',
     color: theme.colors.textDark,
-    fontSize: 18,
-    fontWeight: '700',
+    ...theme.typography.cardTitle,
   },
   addButton: {
     width: 42,
@@ -248,17 +276,13 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     color: theme.colors.textDark,
-    fontSize: 27,
-    lineHeight: 31,
-    fontWeight: '800',
+    ...theme.typography.hero,
     marginBottom: 11,
   },
-  heroDescription: { color: theme.colors.textMuted, fontSize: 16, lineHeight: 23 },
+  heroDescription: { ...theme.typography.body, color: theme.colors.textMuted },
   sectionTitle: {
     color: theme.colors.textDark,
-    fontSize: 18,
-    lineHeight: 23,
-    fontWeight: '700',
+    ...theme.typography.section,
     marginTop: 30,
     marginBottom: 14,
     marginLeft: 13,
@@ -283,8 +307,8 @@ const styles = StyleSheet.create({
   },
   avatarEmoji: { fontSize: 28 },
   voiceDetails: { flex: 1 },
-  voiceName: { color: theme.colors.textDark, fontSize: 16, fontWeight: '700' },
-  metaText: { color: '#747899', fontSize: 13, marginTop: 4 },
+  voiceName: { ...theme.typography.cardTitle, color: theme.colors.textDark },
+  metaText: { ...theme.typography.body, color: '#747899', marginTop: 4 },
   defaultStatus: {
     width: 26,
     height: 26,
@@ -308,7 +332,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   playIcon: { color: theme.colors.textDark, fontSize: 13 },
-  actionText: { color: theme.colors.textDark, fontSize: 14, fontWeight: '700' },
+  actionText: { ...theme.typography.section, color: theme.colors.textDark },
   addVoiceButton: {
     minHeight: 52,
     borderRadius: 15,
@@ -317,5 +341,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 2,
   },
-  addVoiceButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  addVoiceButtonText: { ...theme.typography.section, color: '#FFFFFF' },
 });

@@ -40,8 +40,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
   },
   logo: {
-    fontSize: 28,
-    fontWeight: '800',
+    ...theme.typography.hero,
     color: theme.colors.textDark,
     letterSpacing: -1,
   },
@@ -50,11 +49,10 @@ const styles = StyleSheet.create({
   },
   logoDot: {
     color: theme.colors.primary,
-    fontWeight: '800',
+    fontWeight: '700',
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...theme.typography.cardTitle,
     color: theme.colors.textDark,
   },
   iconBtn: {

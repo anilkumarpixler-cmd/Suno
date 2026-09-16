@@ -43,5 +43,5 @@ const styles = StyleSheet.create({
 		elevation: 4,
 		
 	},
-	message: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', flexShrink: 1 },
+	message: { ...theme.typography.body, color: '#FFFFFF', fontWeight: '500', flexShrink: 1 },
 });

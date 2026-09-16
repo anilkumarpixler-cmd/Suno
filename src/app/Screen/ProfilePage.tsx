@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { showToast } from '../components/Common/Toast';
 import { useApp } from '../Context/AppContext';
+import { theme } from '../Theme/Index';
 import { RootScreen } from '../Types';
 
 const colors = {
@@ -185,8 +186,7 @@ const styles = StyleSheet.create({
     right: 0,
     textAlign: 'center',
     color: colors.navy,
-    fontSize: 18,
-    fontWeight: '700',
+    ...theme.typography.cardTitle,
   },
   content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 28 },
   profileCard: {
@@ -209,8 +209,8 @@ const styles = StyleSheet.create({
   },
   avatar: { fontSize: 27 },
   profileDetails: { flex: 1, marginLeft: 14 },
-  profileName: { color: colors.navy, fontSize: 16, fontWeight: '700' },
-  profileAge: { color: colors.muted, fontSize: 13, marginTop: 4 },
+  profileName: { ...theme.typography.cardTitle, color: colors.navy },
+  profileAge: { ...theme.typography.body, color: colors.muted, marginTop: 4 },
   editButton: {
     width: 46,
     height: 46,
@@ -227,8 +227,7 @@ const styles = StyleSheet.create({
   editIcon: { color: colors.navy, fontSize: 21 },
   sectionTitle: {
     color: colors.navy,
-    fontSize: 18,
-    fontWeight: '700',
+    ...theme.typography.section,
     marginTop: 32,
     marginBottom: 14,
   },
@@ -254,10 +253,10 @@ const styles = StyleSheet.create({
   settingIcon: { color: colors.navy, fontSize: 29, lineHeight: 32 },
   yellowIcon: { color: colors.yellow },
   settingDetails: { flex: 1, marginLeft: 16 },
-  settingTitle: { color: colors.navy, fontSize: 15, fontWeight: '700' },
-  settingSubtitle: { color: colors.muted, fontSize: 13, marginTop: 4 },
+  settingTitle: { ...theme.typography.section, color: colors.navy },
+  settingSubtitle: { ...theme.typography.body, color: colors.muted, marginTop: 4 },
   chevron: { color: colors.navy, fontSize: 25, fontWeight: '300', marginLeft: 10 },
   placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
-  placeholderTitle: { color: colors.navy, fontSize: 20, fontWeight: '700' },
-  placeholderText: { color: colors.muted, fontSize: 14, marginTop: 8 },
+  placeholderTitle: { ...theme.typography.cardTitle, color: colors.navy },
+  placeholderText: { ...theme.typography.body, color: colors.muted, marginTop: 8 },
 });

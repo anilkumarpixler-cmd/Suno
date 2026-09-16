@@ -35,6 +35,8 @@ type AppContextType = {
   deleteVoice: (voiceId: string) => Promise<void>;
   toggleFavorite: (storyId: string) => void;
   changeNarrator: (storyId: string, voiceId: string) => void;
+  narratorPickerStoryId: string | null;
+  openNarratorPicker: (storyId: string) => void;
   createNewStory: (input: CreateStoryInput) => Promise<void>;
 };
 
@@ -58,11 +60,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [lastPlayedStoryId, setLastPlayedStoryId] = useState<string | null>(
     initialStories.find((story) => story.progress > 0)?.id ?? null
   );
+  const [narratorPickerStoryId, setNarratorPickerStoryId] = useState<string | null>(null);
 
   const navigateToScreen = (screen: RootScreen) => {
+    if (screen !== 'Voices' && screen !== 'AddVoice') {
+      setNarratorPickerStoryId(null);
+    }
     if (currentScreen === screen) return;
     setCurrentScreenState(screen);
     router.replace(screenRoutes[screen] as never);
+  };
+
+  const openNarratorPicker = (storyId: string) => {
+    setNarratorPickerStoryId(storyId);
+    navigateToScreen('Voices');
   };
 
   const {
@@ -186,10 +197,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const createNewStory = async (input: CreateStoryInput) => {
+    const title = input.title.trim();
     const script = input.script.trim();
+    if (!title) throw new Error('Story title is required');
+    if (!script) throw new Error('Story text is required');
+
     const newStory: Story = {
       id: `s_${Date.now()}`,
-      title: input.title.trim(),
+      title,
       description: script.slice(0, 80),
       category: input.category,
       duration: estimateDuration(script),
@@ -202,7 +217,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const saved = await saveStory(newStory);
-    if (!saved) return;
+    if (!saved) throw new Error('Could not save story');
 
     setStories((currentStories) => [newStory, ...currentStories]);
     playStory(newStory, true);
@@ -233,6 +248,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteVoice,
         toggleFavorite,
         changeNarrator,
+        narratorPickerStoryId,
+        openNarratorPicker,
         createNewStory,
       }}
     >

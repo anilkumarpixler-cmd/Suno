@@ -102,17 +102,27 @@ export const deleteVoiceOnServer = async (voiceId: string): Promise<void> => {
   if (!response.ok) throw new Error(await readError(response));
 };
 
-export const synthesizeStory = async (text: string, language: string): Promise<TtsResult> => {
-  const response = await apiFetch('/v1/tts', {
+export const convertStory = async (
+  text: string,
+  language: string,
+  voiceId: string,
+): Promise<TtsResult> => {
+  const response = await apiFetch('/v1/convert', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, language }),
+    body: JSON.stringify({
+      text,
+      language,
+      voice_id: voiceId,
+    }),
   });
   if (!response.ok) throw new Error(await readError(response));
   const data = await response.json();
+  const audioUrl = typeof data.audio_url === 'string' ? data.audio_url : '';
+  if (!audioUrl) throw new Error('Clone did not return audio.');
   return {
-    id: data.id,
-    audioUrl: data.audio_url,
+    id: String(data.id || ''),
+    audioUrl,
     duration: Number(data.duration) || 1,
   };
 };

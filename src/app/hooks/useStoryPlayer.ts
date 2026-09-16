@@ -1,7 +1,8 @@
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useEffect, useRef, useState } from 'react';
 import { RootScreen, Story, Voice } from '../Types';
-import { synthesizeStory } from '../services/sunoApi';
+import { convertStory } from '../services/sunoApi';
+import { showToast } from '../components/Common/Toast';
 import {
   estimateDuration,
   languageToLocale,
@@ -61,10 +62,11 @@ export const useStoryPlayer = ({
   const storyDuration = (story: Story) =>
     durationRef.current > 1 ? durationRef.current : estimateDuration(story.script || story.title);
 
-  const resolveLanguage = (story: Story) => {
-    const narrator = voices.find((voice) => voice.id === story.narratorId);
-    return narrator?.languages[0] || story.language || 'English';
-  };
+  const resolveNarrator = (story: Story) =>
+    voices.find((voice) => voice.id === story.narratorId);
+
+  const resolveLanguage = (story: Story) =>
+    resolveNarrator(story)?.languages[0] || story.language || 'English';
 
   const safePause = () => {
     try {
@@ -115,9 +117,9 @@ export const useStoryPlayer = ({
     });
   };
 
-  const playServerAudio = async (story: Story, resumeAt: number, speakId: number) => {
+  const playClonedAudio = async (story: Story, voiceId: string, resumeAt: number, speakId: number) => {
     try {
-      const result = await synthesizeStory(story.script || story.title, resolveLanguage(story));
+      const result = await convertStory(story.script || story.title, resolveLanguage(story), voiceId);
       if (speakId !== speakIdRef.current || !shouldPlayRef.current) return;
 
       setSource('server');
@@ -136,8 +138,10 @@ export const useStoryPlayer = ({
         }
       }
       if (shouldPlayRef.current && speakId === speakIdRef.current) safePlay();
-    } catch {
+    } catch (error) {
       if (speakId !== speakIdRef.current) return;
+      const message = error instanceof Error ? error.message : 'Voice clone failed';
+      showToast(message);
       setAudioDuration(estimateDuration(story.script || story.title));
       speakWithDevice(story, resumeAt, speakId);
     }
@@ -146,11 +150,19 @@ export const useStoryPlayer = ({
   const speakRemaining = (story: Story, time: number) => {
     const speakId = ++speakIdRef.current;
     storyRef.current = story;
-    setSource('preparing');
-    setTime(0);
     stopSpeech();
     safePause();
-    void playServerAudio(story, time, speakId);
+
+    const narrator = resolveNarrator(story);
+    if (!narrator) {
+      setAudioDuration(estimateDuration(story.script || story.title));
+      speakWithDevice(story, time, speakId);
+      return;
+    }
+
+    setSource('preparing');
+    setTime(0);
+    void playClonedAudio(story, narrator.id, time, speakId);
   };
 
   const playStory = (story: Story, autoPlay = true) => {
@@ -272,7 +284,6 @@ export const useStoryPlayer = ({
   const restartSpeech = (story: Story) => {
     setActiveStory(story);
     storyRef.current = story;
-    if (!shouldPlayRef.current && !isPlaying) return;
     shouldPlayRef.current = true;
     setIsPlaying(true);
     speakRemaining(story, currentTimeRef.current);

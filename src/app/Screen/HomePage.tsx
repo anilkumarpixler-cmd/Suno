@@ -138,8 +138,8 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
   },
   heroTextContainer: { flex: 1, marginRight: theme.spacing.sm},
-  heroTitle: { fontSize: 25, fontWeight: '800', color: theme.colors.textDark, marginBottom: 8 },
-  heroSub: { fontSize: 15, color: theme.colors.textMuted, lineHeight: 21 },
+  heroTitle: { ...theme.typography.hero, color: theme.colors.textDark, marginBottom: 8 },
+  heroSub: { ...theme.typography.body, color: theme.colors.textMuted },
   heroEmoji: { fontSize: 49, lineHeight: 60 },
   sectionHeader: {
     marginBottom: theme.spacing.sm,
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.textDark },
+  sectionTitle: { ...theme.typography.section, color: theme.colors.textDark },
   createStoryButton: {
     paddingVertical: theme.spacing.xs,
     paddingLeft: theme.spacing.sm,
@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: '700',
   },
-  subSectionTitle: { fontSize: 24, fontWeight: '700', color: theme.colors.textDark, marginBottom: theme.spacing.sm },
+  subSectionTitle: { ...theme.typography.hero, fontSize: 24, lineHeight: 30, color: theme.colors.textDark, marginBottom: theme.spacing.sm },
   popularTitle: { marginTop: theme.spacing.xs },
   pillsScroll: { marginBottom: theme.spacing.md },
   pill: {
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   activePill: { backgroundColor: theme.colors.primary },
-  pillText: { fontSize: 17, fontWeight: '600', color: theme.colors.textDark },
-  activePillText: { color: '#FFFFFF',fontWeight: '700',fontSize: 17 },
+  pillText: { ...theme.typography.badge, color: theme.colors.textDark },
+  activePillText: { ...theme.typography.badge, color: '#FFFFFF' },
   section: { marginTop: theme.spacing.xs },
 });

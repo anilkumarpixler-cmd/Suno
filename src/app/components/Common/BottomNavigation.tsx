@@ -57,14 +57,14 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
   label: {
-    fontSize: 11,
+    ...theme.typography.caption,
     color: theme.colors.textMuted,
     marginTop: 2,
-    fontWeight: '500',
   },
   activeLabel: {
+    ...theme.typography.badge,
     color: theme.colors.primary,
-    fontWeight: '700',
+    marginTop: 2,
   },
   createPill: {
     backgroundColor: theme.colors.primary,
