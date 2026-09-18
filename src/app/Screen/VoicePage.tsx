@@ -14,6 +14,7 @@ interface VoiceCardProps {
   voice: Voice;
   isSelected: boolean;
   onSetDefault: (voiceId: string) => void;
+  onUseForStory: (voiceId: string) => void;
   onPreviewVoice: (voice: Voice) => void;
   onDeleteVoice: (voiceId: string) => void;
 }
@@ -119,6 +120,25 @@ export const FamilyVoicesScreen: React.FC = () => {
     showToast(`${voice.name} is now your default narrator`);
   };
 
+  const handleUseForStory = (voiceId: string) => {
+    if (!activeStory) {
+      setCurrentScreen('Home');
+      return;
+    }
+    if (activeStory.narratorId === voiceId) {
+      setCurrentScreen('NowPlaying');
+      return;
+    }
+    const voice = voices.find((item) => item.id === voiceId);
+    changeNarrator(activeStory.id, voiceId);
+    showToast(`${voice?.name || 'Narrator'} is narrating this story`);
+    setCurrentScreen('NowPlaying');
+  };
+
+  const handleBack = () => {
+    setCurrentScreen(isPicker && activeStory ? 'NowPlaying' : 'Home');
+  };
+
   const handlePreviewVoice = (voice: Voice) => {
     if (!voice.audioUri) {
       Alert.alert('No recording', 'This voice does not have a recording.');
@@ -163,7 +183,7 @@ export const FamilyVoicesScreen: React.FC = () => {
           accessibilityLabel="Go back">
           <Text style={styles.backIcon}>‹</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>Family Voices</Text>
+        <Text style={styles.headerTitle}>{isPicker ? 'Choose narrator' : 'Family Voices'}</Text>
         <Pressable
           style={styles.addButton}
           onPress={() => setCurrentScreen('AddVoice')}
@@ -233,6 +253,7 @@ export const FamilyVoicesScreen: React.FC = () => {
             voice={voice}
             isSelected={voice.id === selectedVoiceId}
             onSetDefault={handleSetDefault}
+            onUseForStory={handleUseForStory}
             onPreviewVoice={handlePreviewVoice}
             onDeleteVoice={handleDeleteVoice}
           />

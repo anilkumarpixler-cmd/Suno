@@ -48,8 +48,11 @@ export const NowPlayingScreen: React.FC = () => {
     duration: trackDuration,
     setCurrentScreen,
     openNarratorPicker,
+<<<<<<< Updated upstream
     playbackSpeed,
     setPlaybackSpeed,
+=======
+>>>>>>> Stashed changes
   } = useApp();
   const { gradients } = useAppTheme();
   const styles = useThemedStyles(makeStyles);
@@ -184,7 +187,11 @@ export const NowPlayingScreen: React.FC = () => {
           />
           <TouchableOpacity
             style={styles.changeNarratorButton}
+<<<<<<< Updated upstream
             onPress={() => openNarratorPicker(activeStory.id)}
+=======
+            onPress={() => openNarratorPicker()}
+>>>>>>> Stashed changes
             accessibilityRole="button"
             accessibilityLabel="Change narrator">
             <Text style={styles.changeNarratorText}> Change narrator</Text>

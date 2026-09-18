@@ -26,7 +26,7 @@ export interface Voice {
   audioUri?: string;
 }
 
-export interface Story {
+export interface   Story {
   id: string;
   title: string;
   description: string;

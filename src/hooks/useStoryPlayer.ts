@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useEffect, useRef, useState } from 'react';
 import { RootScreen, Story, Voice } from '../Types';
-import { convertStory } from '../services/sunoApi';
+import { synthesizeStory } from '../services/sunoApi';
 import { showToast } from '../components/Common/Toast';
 import {
   estimateDuration,
@@ -44,6 +44,7 @@ const canClone = (voice?: Voice) => Boolean(voice?.id && voice.audioUri);
 export const useStoryPlayer = ({
   stories,
   voices,
+  currentScreen,
   setCurrentScreen,
   onClonedAudio,
 }: UseStoryPlayerArgs) => {
@@ -166,10 +167,7 @@ export const useStoryPlayer = ({
     awaitingPlayRef.current = true;
     hasStartedRef.current = false;
     setTime(start);
-    const replaced = player.replace(audioUrl);
-    if (replaced && typeof (replaced as Promise<unknown>).then === 'function') {
-      await replaced;
-    }
+    player.replace(audioUrl);
   };
 
   const playClonedAudio = async (story: Story, voice: Voice, resumeAt: number, speakId: number) => {
@@ -182,8 +180,11 @@ export const useStoryPlayer = ({
           ? story.audioUri
           : null;
       const result = cached
-        ? { audioUrl: cached, duration: story.duration || estimateDuration(story.script || story.title) }
-        : await convertStory(story.script || story.title, language, voice.id);
+        ? { audioUrl: cached, duration: story.duration || estimateDuration(story.script || story.title), cloned: true }
+        : await synthesizeStory(story.script || story.title, language, voice.id);
+      if (!result.cloned) {
+        showToast('Playing a stock voice — clone is unavailable');
+      }
       if (speakId !== speakIdRef.current || !shouldPlayRef.current) return;
 
       if (!cached) {

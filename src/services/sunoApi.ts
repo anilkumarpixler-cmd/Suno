@@ -18,6 +18,7 @@ export type TtsResult = {
   id: string;
   audioUrl: string;
   duration: number;
+  cloned: boolean;
 };
 
 const toVoice = (item: VoiceDto): Voice => ({
@@ -102,27 +103,46 @@ export const deleteVoiceOnServer = async (voiceId: string): Promise<void> => {
   if (!response.ok) throw new Error(await readError(response));
 };
 
-export const convertStory = async (
+// export const convertStory = async (
+//   text: string,
+//   language: string,
+//   voiceId: string,
+// ): Promise<TtsResult> => {
+//   const response = await apiFetch('/v1/convert', {
+//     method: 'POST',
+//     headers: { 'Content-Type': 'application/json' },
+//     body: JSON.stringify({
+//       text,
+//       language,
+//       voice_id: voiceId,
+//     }),
+//   });
+//   if (!response.ok) throw new Error(await readError(response));
+//   const data = await response.json();
+//   const audioUrl = typeof data.audio_url === 'string' ? data.audio_url : '';
+//   if (!audioUrl) throw new Error('Clone did not return audio.');
+export const synthesizeStory = async (
   text: string,
   language: string,
-  voiceId: string,
+  voiceId?: string,
 ): Promise<TtsResult> => {
-  const response = await apiFetch('/v1/convert', {
+  // #region agent log
+  fetch('http://127.0.0.1:7423/ingest/e02efffa-4b4a-4b28-89cc-c96cc76989ba',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'98a9d4'},body:JSON.stringify({sessionId:'98a9d4',hypothesisId:'E',location:'sunoApi.ts:synthesizeStory',message:'app tts request',data:{voiceId:voiceId||'',language,textLen:text.length,apiBase:API_BASE_URL},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  const response = await apiFetch('/v1/tts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      text,
-      language,
-      voice_id: voiceId,
-    }),
+    body: JSON.stringify({ text, language, voice_id: voiceId || undefined }),
   });
   if (!response.ok) throw new Error(await readError(response));
   const data = await response.json();
   const audioUrl = typeof data.audio_url === 'string' ? data.audio_url : '';
-  if (!audioUrl) throw new Error('Clone did not return audio.');
+  if (!audioUrl) throw new Error('TTS did not return audio.');
+
   return {
     id: String(data.id || ''),
     audioUrl,
     duration: Number(data.duration) || 1,
+    cloned: Boolean(data.cloned),
   };
 };

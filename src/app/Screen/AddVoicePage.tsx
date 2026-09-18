@@ -107,6 +107,7 @@ export const AddVoiceScreen: React.FC = () => {
     try {
       await recorder.stop();
       const uri = recorder.uri;
+      console.log(uri,"🎤🎤🎤")
       if (uri) {
         setRecordedUri(uri);
         setIsRecorded(true);
