@@ -1,5 +1,5 @@
 import { Voice } from '../Types';
-import { readRecordingBase64 } from '../../storage/voiceAudio';
+import { readRecordingBase64 } from '../storage/voiceAudio';
 import { API_BASE_URL } from './apiConfig';
 
 type VoiceDto = {

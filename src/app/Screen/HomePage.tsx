@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
-import { FlatList, View, ScrollView, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { FlatList, View, ScrollView, Text, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useApp } from '../Context/AppContext';
-import { Header } from '../components/Common/header';
-import { StoryCard } from '../components/Common/Home/StoryCart';
-import { Category } from '../Types';
-import { theme } from '../Theme/Index';
+import { useApp } from '@/Context/AppContext';
+import { Header } from '@/components/Common/header';
+import { StoryCard } from '@/components/Common/Home/StoryCart';
+import { Category } from '@/Types';
+import { borderRadius, spacing, theme, ThemeColors } from '@/Theme/Index';
+import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export const HomeScreen: React.FC = () => {
   const { child, stories, voices, playStory, setCurrentScreen, lastPlayedStoryId } = useApp();
+  const { gradients } = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const [selectedCategory, setSelectedCategory] = useState<Category>('All');
 
   const categories: { label: Category; icon?: string }[] = [
@@ -48,7 +51,7 @@ export const HomeScreen: React.FC = () => {
         ListHeaderComponent={
           <>
             {/* Hero Card */}
-            <LinearGradient colors={theme.gradients.hero} style={styles.heroCard}>
+            <LinearGradient colors={gradients.hero} style={styles.heroCard}>
               <View style={styles.heroTextContainer}>
                 <Text style={styles.heroTitle}>Stories in the voices they love.</Text>
                 <Text style={styles.heroSub}>
@@ -117,59 +120,60 @@ export const HomeScreen: React.FC = () => {
 
 export default HomeScreen;
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
-  scrollContent: { padding: theme.spacing.md },
+const makeStyles = (colors: ThemeColors) => ({
+  container: { flex: 1, backgroundColor: colors.background },
+  scrollContent: { padding: spacing.md },
   avatarBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#FFEAA7',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.accentPink,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   avatarText: { fontSize: 18 },
   heroCard: {
     minHeight: 180,
-    borderRadius: theme.borderRadius.card,
-    padding: theme.spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: theme.spacing.lg,
+    borderRadius: borderRadius.card,
+    padding: spacing.lg,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    marginBottom: spacing.lg,
   },
-  heroTextContainer: { flex: 1, marginRight: theme.spacing.sm},
-  heroTitle: { ...theme.typography.hero, color: theme.colors.textDark, marginBottom: 8 },
-  heroSub: { ...theme.typography.body, color: theme.colors.textMuted },
+  heroTextContainer: { flex: 1, marginRight: spacing.sm },
+  heroTitle: { ...theme.typography.hero, color: colors.textDark, marginBottom: 8 },
+  heroSub: { ...theme.typography.body, color: colors.textMuted },
   heroEmoji: { fontSize: 49, lineHeight: 60 },
   sectionHeader: {
-    marginBottom: theme.spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
   },
-  sectionTitle: { ...theme.typography.section, color: theme.colors.textDark },
+  sectionTitle: { ...theme.typography.section, color: colors.textDark },
   createStoryButton: {
-    paddingVertical: theme.spacing.xs,
-    paddingLeft: theme.spacing.sm,
+    paddingVertical: spacing.xs,
+    paddingLeft: spacing.sm,
   },
   createStoryIcon: {
-    color: theme.colors.primary,
+    color: colors.primary,
     fontSize: 21,
     lineHeight: 20,
-    fontWeight: '700',
+    fontWeight: '700' as const,
   },
-  subSectionTitle: { ...theme.typography.hero, fontSize: 24, lineHeight: 30, color: theme.colors.textDark, marginBottom: theme.spacing.sm },
-  popularTitle: { marginTop: theme.spacing.xs },
-  pillsScroll: { marginBottom: theme.spacing.md },
+  subSectionTitle: { ...theme.typography.hero, fontSize: 24, lineHeight: 30, color: colors.textDark, marginBottom: spacing.sm },
+  popularTitle: { marginTop: spacing.xs },
+  pillsScroll: { marginBottom: spacing.md },
   pill: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: theme.borderRadius.pill,
-    backgroundColor: '#EFECE6',
+    borderRadius: borderRadius.pill,
+    backgroundColor: colors.pillBg,
     marginRight: 8,
+
   },
-  activePill: { backgroundColor: theme.colors.primary },
-  pillText: { ...theme.typography.badge, color: theme.colors.textDark },
-  activePillText: { ...theme.typography.badge, color: '#FFFFFF' },
-  section: { marginTop: theme.spacing.xs },
+  activePill: { backgroundColor: colors.primary },
+  pillText: { ...theme.typography.badge, color: colors.textDark, fontSize: 16 },
+  activePillText: { ...theme.typography.badge, color: colors.onPrimary ,fontSize:18},
+  section: { marginTop: spacing.xs },
 });

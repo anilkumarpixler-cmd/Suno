@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View, Text } from 'react-native';
+import { Alert, Pressable, ScrollView, View, Text } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useApp } from '../Context/AppContext';
-import { theme } from '../Theme/Index';
-import { showToast } from '../components/Common/Toast';
-import { Voice } from '../Types';
+import { useApp } from '@/Context/AppContext';
+import { spacing, theme, ThemeColors } from '@/Theme/Index';
+import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
+import { showToast } from '@/components/Common/Toast';
+import { Voice } from '@/Types';
 import { useAudioPlayer } from 'expo-audio';
-import { PreviewModal } from '../modal/previewModal';
+import { PreviewModal } from '@/modal/previewModal';
 
 interface VoiceCardProps {
   voice: Voice;
@@ -23,7 +24,9 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
   onSetDefault,
   onPreviewVoice,
   onDeleteVoice,
-}) => (
+}) => {
+  const styles = useThemedStyles(makeStyles);
+  return (
   <View style={styles.voiceCard}>
     <View style={styles.voiceTopRow}>
       <View style={styles.avatarCircle}>
@@ -63,11 +66,12 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
         onPress={() => onDeleteVoice(voice.id)}
         accessibilityRole="button"
         accessibilityLabel={`Delete ${voice.name}`}>
-        <Text>Delete</Text>
+        <Text style={styles.actionText}>Delete</Text>
       </Pressable>
     </View>
   </View>
-);
+  );
+};
 
 export const FamilyVoicesScreen: React.FC = () => {
   const {
@@ -80,6 +84,8 @@ export const FamilyVoicesScreen: React.FC = () => {
     narratorPickerStoryId,
     changeNarrator,
   } = useApp();
+  const { gradients } = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const isPicker = Boolean(narratorPickerStoryId);
   const selectedVoiceId = isPicker
     ? stories.find((story) => story.id === narratorPickerStoryId)?.narratorId ||
@@ -169,7 +175,7 @@ export const FamilyVoicesScreen: React.FC = () => {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <LinearGradient
-          colors={theme.gradients.hero}
+          colors={gradients.hero}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.heroCard}>
@@ -179,7 +185,7 @@ export const FamilyVoicesScreen: React.FC = () => {
           </Text>
         </LinearGradient>
 
-        <Text style={styles.sectionTitle}>Your voices</Text>
+        <Text style={styles.sectionTitle}>{isPicker ? 'Choose narrator' : 'Your voices'}</Text>
 
         
           <PreviewModal
@@ -193,7 +199,35 @@ export const FamilyVoicesScreen: React.FC = () => {
             handleStopPreview={handleStopPreview}
           />
 
-        {voices.map((voice) => (
+        {isPicker && (
+          <Pressable
+            style={styles.voiceCard}
+            onPress={() => {
+              if (!narratorPickerStoryId) return;
+              changeNarrator(narratorPickerStoryId, '');
+              showToast('Using system voice');
+              setCurrentScreen('NowPlaying');
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Use system voice">
+            <View style={styles.voiceTopRow}>
+              <View style={styles.avatarCircle}>
+                <Text style={styles.avatarEmoji}>🔊</Text>
+              </View>
+              <View style={styles.voiceDetails}>
+                <Text style={styles.voiceName}>System Voice</Text>
+                <Text style={styles.metaText}>Device speech · no cloning</Text>
+              </View>
+              {!selectedVoiceId && (
+                <View style={styles.defaultStatus} accessibilityLabel="System Voice selected">
+                  <Text style={styles.checkMark}>✓</Text>
+                </View>
+              )}
+            </View>
+          </Pressable>
+        )}
+
+        {(isPicker ? voices.filter((voice) => Boolean(voice.audioUri)) : voices).map((voice) => (
           <VoiceCard
             key={voice.id}
             voice={voice}
@@ -220,51 +254,51 @@ export const VoicesScreen = FamilyVoicesScreen;
 
 export default VoicesScreen;
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
+const makeStyles = (colors: ThemeColors) => ({
+  container: { flex: 1, backgroundColor: colors.background },
   header: {
     height: 60,
     paddingHorizontal: 20,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center' as const,
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
   },
   backButton: {
     width: 42,
     height: 42,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
+    alignItems: 'flex-start' as const,
+    justifyContent: 'center' as const,
     zIndex: 1,
   },
   backIcon: {
-    color: theme.colors.textDark,
+    color: colors.textDark,
     fontSize: 34,
-    fontWeight: '300',
+    fontWeight: '300' as const,
     lineHeight: 36,
   },
   headerTitle: {
-    position: 'absolute',
+    position: 'absolute' as const,
     left: 0,
     right: 0,
-    textAlign: 'center',
-    color: theme.colors.textDark,
+    textAlign: 'center' as const,
+    color: colors.textDark,
     ...theme.typography.cardTitle,
   },
   addButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: theme.colors.cardBg,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.cardBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     borderWidth: 1,
-    borderColor: theme.colors.borderLight,
+    borderColor: colors.borderLight,
     zIndex: 1,
   },
   addIcon: {
-    color: theme.colors.textDark,
+    color: colors.textDark,
     fontSize: 27,
-    fontWeight: '400',
+    fontWeight: '400' as const,
     lineHeight: 28,
   },
   content: { paddingHorizontal: 19, paddingTop: 28, paddingBottom: 28 },
@@ -275,71 +309,71 @@ const styles = StyleSheet.create({
     paddingVertical: 23,
   },
   heroTitle: {
-    color: theme.colors.textDark,
+    color: colors.textDark,
     ...theme.typography.hero,
     marginBottom: 11,
   },
-  heroDescription: { ...theme.typography.body, color: theme.colors.textMuted },
+  heroDescription: { ...theme.typography.body, color: colors.textMuted },
   sectionTitle: {
-    color: theme.colors.textDark,
+    color: colors.textDark,
     ...theme.typography.section,
     marginTop: 30,
     marginBottom: 14,
     marginLeft: 13,
   },
   voiceCard: {
-    backgroundColor: theme.colors.cardBg,
-    borderColor: '#E8DED8',
+    backgroundColor: colors.cardBg,
+    borderColor: colors.borderLight,
     borderRadius: 21,
     borderWidth: 1,
     padding: 18,
     marginBottom: 13,
   },
-  voiceTopRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center' },
+  voiceTopRow: { minHeight: 52, flexDirection: 'row' as const, alignItems: 'center' as const },
   avatarCircle: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: theme.colors.purpleLightBg,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.purpleLightBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginRight: 14,
   },
   avatarEmoji: { fontSize: 28 },
   voiceDetails: { flex: 1 },
-  voiceName: { ...theme.typography.cardTitle, color: theme.colors.textDark },
-  metaText: { ...theme.typography.body, color: '#747899', marginTop: 4 },
+  voiceName: { ...theme.typography.cardTitle, color: colors.textDark },
+  metaText: { ...theme.typography.body, color: colors.textMuted, marginTop: 4 },
   defaultStatus: {
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: theme.colors.success,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.success,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  checkMark: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
-  actionRow: { flexDirection: 'row', gap: theme.spacing.sm, marginTop: 18 },
+  checkMark: { color: colors.onPrimary, fontSize: 16, fontWeight: '800' as const },
+  actionRow: { flexDirection: 'row' as const, gap: spacing.sm, marginTop: 18 },
   actionButton: {
     flex: 1,
     minHeight: 52,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: theme.colors.borderLight,
-    backgroundColor: theme.colors.cardBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
+    borderColor: colors.borderLight,
+    backgroundColor: colors.cardBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    flexDirection: 'row' as const,
     gap: 8,
   },
-  playIcon: { color: theme.colors.textDark, fontSize: 13 },
-  actionText: { ...theme.typography.section, color: theme.colors.textDark },
+  playIcon: { color: colors.textDark, fontSize: 13 },
+  actionText: { ...theme.typography.section, color: colors.textDark },
   addVoiceButton: {
     minHeight: 52,
     borderRadius: 15,
-    backgroundColor: theme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginTop: 2,
   },
-  addVoiceButtonText: { ...theme.typography.section, color: '#FFFFFF' },
+  addVoiceButtonText: { ...theme.typography.section, color: colors.onPrimary },
 });

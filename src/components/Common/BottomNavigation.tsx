@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { RootScreen } from '../../Types';
-import { theme } from '../../Theme/Index';
+import { theme, ThemeColors } from '../../Theme/Index';
+import { useThemedStyles } from '../../Theme/ThemeProvider';
 
 interface BottomNavProps {
   activeScreen: RootScreen;
@@ -9,6 +10,7 @@ interface BottomNavProps {
 }
 
 export const BottomNavigation: React.FC<BottomNavProps> = ({ activeScreen, onSelectTab }) => {
+  const styles = useThemedStyles(makeStyles);
   const tabs: { key: RootScreen; label: string; icon: string }[] = [
     { key: 'Home', label: 'Home', icon: '🏠' },
     { key: 'Voices', label: 'Voices', icon: '🎙️' },
@@ -39,40 +41,40 @@ export const BottomNavigation: React.FC<BottomNavProps> = ({ activeScreen, onSel
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => ({
   container: {
     height: 70,
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
+    backgroundColor: colors.navBg,
+    flexDirection: 'row' as const,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.borderLight,
+    borderTopColor: colors.borderLight,
     paddingBottom: 10,
   },
   tab: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   icon: {
     fontSize: 20,
   },
   label: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: colors.textMuted,
     marginTop: 2,
   },
   activeLabel: {
     ...theme.typography.badge,
-    color: theme.colors.primary,
+    color: colors.primary,
     marginTop: 2,
   },
   createPill: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: colors.primary,
     width: 36,
     height: 36,
     borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   createIcon: {
     fontSize: 18,

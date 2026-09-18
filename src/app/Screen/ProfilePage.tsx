@@ -1,53 +1,49 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { showToast } from '../components/Common/Toast';
-import { useApp } from '../Context/AppContext';
-import { theme } from '../Theme/Index';
-import { RootScreen } from '../Types';
+import { showToast } from '@/components/Common/Toast';
+import { useApp } from '@/Context/AppContext';
+import { theme, ThemeColors } from '@/Theme/Index';
+import { appearanceLabel, useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
+import { RootScreen } from '@/Types';
 
-const colors = {
-  background: '#FFF9F4',
-  card: '#FFFFFF',
-  navy: '#07152F',
-  muted: '#746C88',
-  lavender: '#F1E9FF',
-  border: '#E8E1DC',
-  yellow: '#F5C84B',
-};
-
-type SettingIcon = 'globe' | 'moon' | 'microphone' | 'lock';
+type SettingIcon = 'globe' | 'moon' | 'microphone' | 'lock' | 'sun';
 
 interface HeaderProps {
   title: string;
   onBack: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ title, onBack }) => (
-  <View style={styles.header}>
-    <Pressable
-      style={styles.headerButton}
-      onPress={onBack}
-      accessibilityRole="button"
-      accessibilityLabel="Go back">
-      <Text style={styles.backIcon}>‹</Text>
-    </Pressable>
-    <Text style={styles.headerTitle}>{title}</Text>
-    <View style={styles.headerButton} />
-  </View>
-);
+export const Header: React.FC<HeaderProps> = ({ title, onBack }) => {
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View style={styles.header}>
+      <Pressable
+        style={styles.headerButton}
+        onPress={onBack}
+        accessibilityRole="button"
+        accessibilityLabel="Go back">
+        <Text style={styles.backIcon}>‹</Text>
+      </Pressable>
+      <Text style={styles.headerTitle}>{title}</Text>
+      <View style={styles.headerButton} />
+    </View>
+  );
+};
 
 export const IconContainer: React.FC<{ icon: SettingIcon }> = ({ icon }) => {
+  const styles = useThemedStyles(makeStyles);
   const iconContent = {
     globe: '⊕',
     moon: '☾',
+    sun: '☼',
     microphone: '♩',
     lock: '▣',
   }[icon];
 
   return (
     <View style={styles.iconContainer} accessible accessibilityLabel={`${icon} icon`}>
-      <Text style={[styles.settingIcon, icon === 'moon' || icon === 'lock' ? styles.yellowIcon : null]}>
+      <Text style={[styles.settingIcon, icon === 'moon' || icon === 'lock' || icon === 'sun' ? styles.yellowIcon : null]}>
         {iconContent}
       </Text>
     </View>
@@ -61,28 +57,32 @@ interface ProfileCardProps {
   onEdit: () => void;
 }
 
-export const ProfileCard: React.FC<ProfileCardProps> = ({ name, age, avatar, onEdit }) => (
-  <View style={styles.profileCard}>
-    <View style={styles.avatarCircle}>
-      <Text style={styles.avatar}>{avatar}</Text>
+export const ProfileCard: React.FC<ProfileCardProps> = ({ name, age, avatar, onEdit }) => {
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View style={styles.profileCard}>
+      <View style={styles.avatarCircle}>
+        <Text style={styles.avatar}>{avatar}</Text>
+      </View>
+      <View style={styles.profileDetails}>
+        <Text style={styles.profileName}>{name}</Text>
+        <Text style={styles.profileAge}>{age}</Text>
+      </View>
+      <Pressable
+        style={styles.editButton}
+        onPress={onEdit}
+        accessibilityRole="button"
+        accessibilityLabel="Edit profile">
+        <Text style={styles.editIcon}>✎</Text>
+      </Pressable>
     </View>
-    <View style={styles.profileDetails}>
-      <Text style={styles.profileName}>{name}</Text>
-      <Text style={styles.profileAge}>{age}</Text>
-    </View>
-    <Pressable
-      style={styles.editButton}
-      onPress={onEdit}
-      accessibilityRole="button"
-      accessibilityLabel="Edit profile">
-      <Text style={styles.editIcon}>✎</Text>
-    </Pressable>
-  </View>
-);
+  );
+};
 
-export const SectionTitle: React.FC<{ children: string }> = ({ children }) => (
-  <Text style={styles.sectionTitle}>{children}</Text>
-);
+export const SectionTitle: React.FC<{ children: string }> = ({ children }) => {
+  const styles = useThemedStyles(makeStyles);
+  return <Text style={styles.sectionTitle}>{children}</Text>;
+};
 
 interface SettingsCardProps {
   title: string;
@@ -91,20 +91,23 @@ interface SettingsCardProps {
   onPress: () => void;
 }
 
-export const SettingsCard: React.FC<SettingsCardProps> = ({ title, subtitle, icon, onPress }) => (
-  <Pressable
-    style={styles.settingsCard}
-    onPress={onPress}
-    accessibilityRole="button"
-    accessibilityLabel={`${title}, ${subtitle}`}>
-    <IconContainer icon={icon} />
-    <View style={styles.settingDetails}>
-      <Text style={styles.settingTitle}>{title}</Text>
-      <Text style={styles.settingSubtitle}>{subtitle}</Text>
-    </View>
-    <Text style={styles.chevron}>›</Text>
-  </Pressable>
-);
+export const SettingsCard: React.FC<SettingsCardProps> = ({ title, subtitle, icon, onPress }) => {
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <Pressable
+      style={styles.settingsCard}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}, ${subtitle}`}>
+      <IconContainer icon={icon} />
+      <View style={styles.settingDetails}>
+        <Text style={styles.settingTitle}>{title}</Text>
+        <Text style={styles.settingSubtitle}>{subtitle}</Text>
+      </View>
+      <Text style={styles.chevron}>›</Text>
+    </Pressable>
+  );
+};
 
 const settings: Array<{
   id: string;
@@ -121,6 +124,8 @@ const settings: Array<{
 
 export const ProfileScreen: React.FC = () => {
   const { child, setCurrentScreen } = useApp();
+  const { mode, scheme, cycleMode } = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -135,6 +140,12 @@ export const ProfileScreen: React.FC = () => {
           onEdit={() => showToast('Child Profile Editing.')}
         />
         <SectionTitle>Settings</SectionTitle>
+        <SettingsCard
+          title="Appearance"
+          subtitle={`${appearanceLabel(mode)} · ${scheme === 'dark' ? 'Dark' : 'Light'}`}
+          icon={scheme === 'dark' ? 'moon' : 'sun'}
+          onPress={cycleMode}
+        />
         {settings.map((setting) => (
           <SettingsCard
             key={setting.id}
@@ -157,6 +168,7 @@ export default ProfileScreen;
 
 export const SettingsPlaceholderScreen: React.FC<{ title: string }> = ({ title }) => {
   const { setCurrentScreen } = useApp();
+  const styles = useThemedStyles(makeStyles);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -169,23 +181,23 @@ export const SettingsPlaceholderScreen: React.FC<{ title: string }> = ({ title }
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => ({
   container: { flex: 1, backgroundColor: colors.background },
   header: {
     height: 60,
     paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
   },
-  headerButton: { width: 34, height: 40, justifyContent: 'center' },
-  backIcon: { color: colors.navy, fontSize: 32, lineHeight: 34, fontWeight: '300' },
+  headerButton: { width: 34, height: 40, justifyContent: 'center' as const },
+  backIcon: { color: colors.textDark, fontSize: 32, lineHeight: 34, fontWeight: '300' as const },
   headerTitle: {
-    position: 'absolute',
+    position: 'absolute' as const,
     left: 0,
     right: 0,
-    textAlign: 'center',
-    color: colors.navy,
+    textAlign: 'center' as const,
+    color: colors.textDark,
     ...theme.typography.cardTitle,
   },
   content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 28 },
@@ -194,39 +206,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderColor: colors.borderLight,
+    backgroundColor: colors.cardBg,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   avatarCircle: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: colors.lavender,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.purpleLightBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   avatar: { fontSize: 27 },
   profileDetails: { flex: 1, marginLeft: 14 },
-  profileName: { ...theme.typography.cardTitle, color: colors.navy },
-  profileAge: { ...theme.typography.body, color: colors.muted, marginTop: 4 },
+  profileName: { ...theme.typography.cardTitle, color: colors.textDark },
+  profileAge: { ...theme.typography.body, color: colors.textMuted, marginTop: 4 },
   editButton: {
     width: 46,
     height: 46,
     borderRadius: 23,
-    backgroundColor: colors.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: colors.navy,
+    backgroundColor: colors.cardBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    shadowColor: colors.textDark,
     shadowOpacity: 0.08,
     shadowRadius: 7,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  editIcon: { color: colors.navy, fontSize: 21 },
+  editIcon: { color: colors.textDark, fontSize: 21 },
   sectionTitle: {
-    color: colors.navy,
+    color: colors.textDark,
     ...theme.typography.section,
     marginTop: 32,
     marginBottom: 14,
@@ -237,26 +249,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     borderRadius: 21,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderColor: colors.borderLight,
+    backgroundColor: colors.cardBg,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   iconContainer: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: colors.lavender,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.purpleLightBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  settingIcon: { color: colors.navy, fontSize: 29, lineHeight: 32 },
-  yellowIcon: { color: colors.yellow },
+  settingIcon: { color: colors.textDark, fontSize: 29, lineHeight: 32 },
+  yellowIcon: { color: '#F5C84B' },
   settingDetails: { flex: 1, marginLeft: 16 },
-  settingTitle: { ...theme.typography.section, color: colors.navy },
-  settingSubtitle: { ...theme.typography.body, color: colors.muted, marginTop: 4 },
-  chevron: { color: colors.navy, fontSize: 25, fontWeight: '300', marginLeft: 10 },
-  placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
-  placeholderTitle: { ...theme.typography.cardTitle, color: colors.navy },
-  placeholderText: { ...theme.typography.body, color: colors.muted, marginTop: 8 },
+  settingTitle: { ...theme.typography.section, color: colors.textDark },
+  settingSubtitle: { ...theme.typography.body, color: colors.textMuted, marginTop: 4 },
+  chevron: { color: colors.textDark, fontSize: 25, fontWeight: '300' as const, marginLeft: 10 },
+  placeholder: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, padding: 20 },
+  placeholderTitle: { ...theme.typography.cardTitle, color: colors.textDark },
+  placeholderText: { ...theme.typography.body, color: colors.textMuted, marginTop: 8 },
 });

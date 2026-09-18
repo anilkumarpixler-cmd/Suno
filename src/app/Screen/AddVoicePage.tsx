@@ -3,7 +3,6 @@ import {
   Alert,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -16,11 +15,12 @@ import {
   useAudioRecorder,
   useAudioRecorderState,
 } from 'expo-audio';
-import { useApp } from '../Context/AppContext';
-import { Header } from '../components/Common/header';
-import { theme } from '../Theme/Index';
+import { useApp } from '@/Context/AppContext';
+import { Header } from '@/components/Common/header';
+import { borderRadius, spacing, theme, ThemeColors } from '@/Theme/Index';
+import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { deleteVoiceRecording } from '../../storage/voiceAudio';
+import { deleteVoiceRecording } from '@/storage/voiceAudio';
 
 const LANGUAGE_OPTIONS = ['Hindi + English', 'Hindi', 'English', 'Punjabi', 'Gujarati'];
 
@@ -32,6 +32,8 @@ const formatTime = (seconds: number) => {
 
 export const AddVoiceScreen: React.FC = () => {
   const { addVoice, setCurrentScreen } = useApp();
+  const { colors } = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const [name, setName] = useState('');
   const [selectedLang, setSelectedLang] = useState('Hindi + English');
   const [isLangOpen, setIsLangOpen] = useState(false);
@@ -169,6 +171,7 @@ export const AddVoiceScreen: React.FC = () => {
           <TextInput
             style={styles.input}
             placeholder="e.g. Mummy, Papa, Nani"
+            placeholderTextColor={colors.placeholder}
             value={name}
             onChangeText={setName}
           />
@@ -262,114 +265,115 @@ export const AddVoiceScreen: React.FC = () => {
 
 export default AddVoiceScreen;
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
-  scroll: { flex: 1, overflow: 'visible' },
-  content: { padding: theme.spacing.md, overflow: 'visible' },
-  formGroup: { marginBottom: theme.spacing.lg },
+const makeStyles = (colors: ThemeColors) => ({
+  container: { flex: 1, backgroundColor: colors.background },
+  scroll: { flex: 1, overflow: 'visible' as const },
+  content: { padding: spacing.md, overflow: 'visible' as const },
+  formGroup: { marginBottom: spacing.lg },
   langGroup: { zIndex: 20 },
-  dropdownWrap: { position: 'relative' },
-  label: { ...theme.typography.section, color: theme.colors.textDark, marginBottom: 8 },
+  dropdownWrap: { position: 'relative' as const },
+  label: { ...theme.typography.section, color: colors.textDark, marginBottom: 8 },
   input: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBg,
     borderWidth: 1,
-    borderColor: theme.colors.borderLight,
+    borderColor: colors.borderLight,
     borderRadius: 16,
     padding: 14,
+    color: colors.textDark,
     ...theme.typography.body,
   },
   dropdownField: {
     minHeight: 52,
-    borderColor: theme.colors.borderLight,
+    borderColor: colors.borderLight,
     borderRadius: 12,
     borderWidth: 1,
-    backgroundColor: theme.colors.cardBg,
-    paddingHorizontal: theme.spacing.md,
+    backgroundColor: colors.cardBg,
+    paddingHorizontal: spacing.md,
     paddingVertical: 13,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
   },
-  dropdownValue: { ...theme.typography.body, color: theme.colors.textDark },
+  dropdownValue: { ...theme.typography.body, color: colors.textDark },
   chevron: {
-    color: theme.colors.textMuted,
+    color: colors.textMuted,
     fontSize: 22,
     lineHeight: 18,
     marginTop: -5,
   },
   dropdownMenu: {
-    position: 'absolute',
+    position: 'absolute' as const,
     top: 58,
     left: 0,
     right: 0,
     zIndex: 30,
     elevation: 8,
-    backgroundColor: theme.colors.cardBg,
-    borderColor: theme.colors.borderLight,
+    backgroundColor: colors.cardBg,
+    borderColor: colors.borderLight,
     borderRadius: 12,
     borderWidth: 1,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   option: {
     minHeight: 48,
-    justifyContent: 'center',
-    paddingHorizontal: theme.spacing.md,
+    justifyContent: 'center' as const,
+    paddingHorizontal: spacing.md,
   },
-  selectedOption: { backgroundColor: theme.colors.purpleLightBg },
+  selectedOption: { backgroundColor: colors.purpleLightBg },
   optionText: {
     ...theme.typography.body,
-    color: theme.colors.textDark,
+    color: colors.textDark,
   },
   recorderBox: {
-    backgroundColor: theme.colors.purpleLightBg,
+    backgroundColor: colors.purpleLightBg,
     borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: theme.colors.purpleDashed,
-    borderRadius: theme.borderRadius.card,
-    padding: theme.spacing.lg,
-    alignItems: 'center',
-    marginBottom: theme.spacing.lg,
+    borderStyle: 'dashed' as const,
+    borderColor: colors.purpleDashed,
+    borderRadius: borderRadius.card,
+    padding: spacing.lg,
+    alignItems: 'center' as const,
+    marginBottom: spacing.lg,
   },
   micCircle: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#FFF',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.cardBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginBottom: 12,
   },
   micIcon: { fontSize: 24 },
-  recTitle: { ...theme.typography.cardTitle, color: theme.colors.textDark },
-  recSub: { ...theme.typography.caption, color: theme.colors.textMuted, textAlign: 'center', marginTop: 4, marginBottom: 16 },
-  timerText: { ...theme.typography.hero, fontSize: 24, lineHeight: 30, color: theme.colors.primary, marginBottom: 12 },
+  recTitle: { ...theme.typography.cardTitle, color: colors.textDark },
+  recSub: { ...theme.typography.caption, color: colors.textMuted, textAlign: 'center' as const, marginTop: 4, marginBottom: 16 },
+  timerText: { ...theme.typography.hero, fontSize: 24, lineHeight: 30, color: colors.primary, marginBottom: 12 },
   recBtn: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: theme.borderRadius.button,
+    borderRadius: borderRadius.button,
   },
   stopBtn: { backgroundColor: '#E53E3E' },
   disabledBtn: { opacity: 0.5 },
-  recBtnText: { ...theme.typography.section, color: '#FFF' },
+  recBtnText: { ...theme.typography.section, color: colors.onPrimary },
   postRecRow: {
-    flexDirection: 'row',
-    width: '100%',
-    justifyContent: 'space-around',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    width: '100%' as const,
+    justifyContent: 'space-around' as const,
+    alignItems: 'center' as const,
   },
   secondaryBtn: { padding: 12 },
-  secondaryText: { ...theme.typography.section, color: theme.colors.textMuted },
+  secondaryText: { ...theme.typography.section, color: colors.textMuted },
   playBtn: {
-    backgroundColor: '#EFECE6',
+    backgroundColor: colors.pillBg,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 12,
   },
-  playText: { ...theme.typography.section, color: theme.colors.textDark },
-  saveBtn: { backgroundColor: theme.colors.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
-  saveText: { ...theme.typography.section, color: '#FFF' },
-  privacyCard: { backgroundColor: '#FFF', padding: theme.spacing.md, borderRadius: 16 },
-  privacyTitle: { ...theme.typography.section },
-  privacySub: { ...theme.typography.caption, color: theme.colors.textMuted, marginTop: 4 },
+  playText: { ...theme.typography.section, color: colors.textDark },
+  saveBtn: { backgroundColor: colors.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
+  saveText: { ...theme.typography.section, color: colors.onPrimary },
+  privacyCard: { backgroundColor: colors.cardBg, padding: spacing.md, borderRadius: 16 },
+  privacyTitle: { ...theme.typography.section, color: colors.textDark },
+  privacySub: { ...theme.typography.caption, color: colors.textMuted, marginTop: 4 },
 });

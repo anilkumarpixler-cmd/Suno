@@ -11,7 +11,9 @@ export const estimateDuration = (script: string): number => {
 
 export const languageToLocale = (language?: string): string => {
   const value = (language || 'English').toLowerCase();
-  if (value.includes('hindi') || value === 'hi') return 'hi-IN';
+  if (value.includes('hindi') || value === 'hi' || value.includes('punjabi') || value.includes('gujarati')) {
+    return 'hi-IN';
+  }
   return 'en-IN';
 };
 
@@ -80,14 +82,15 @@ export const resumeSpeech = async () => {
 type SpeakOptions = {
   locale: string;
   pitch: number;
+  rate?: number;
   onDone?: () => void;
 };
 
-export const speakText = (text: string, { locale, pitch, onDone }: SpeakOptions) => {
+export const speakText = (text: string, { locale, pitch, rate = 1, onDone }: SpeakOptions) => {
   Speech.speak(text, {
     language: locale,
     pitch,
-    rate: 0.95,
+    rate,
     onDone,
   });
 };

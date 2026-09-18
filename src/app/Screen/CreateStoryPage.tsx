@@ -4,19 +4,19 @@ import {
   Pressable,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   UIManager,
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useApp } from '../Context/AppContext';
-import { theme } from '../Theme/Index';
-import { StoryLanguage } from '../Types';
-import { getFallbackScript, mapStoryTypeToCategory } from '../services/storySpeech';
+import { useApp } from '@/Context/AppContext';
+import { borderRadius, spacing, theme, ThemeColors } from '@/Theme/Index';
+import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
+import { StoryLanguage } from '@/Types';
+import { getFallbackScript, mapStoryTypeToCategory } from '@/services/storySpeech';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { showToast } from '../components/Common/Toast';
+import { showToast } from '@/components/Common/Toast';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -41,26 +41,31 @@ interface CustomDropdownProps {
   onSelect: (value: string) => void;
 }
 
-const FormLabel: React.FC<FormLabelProps> = ({ children }) => (
-  <Text style={styles.label}>{children}</Text>
-);
+const FormLabel: React.FC<FormLabelProps> = ({ children }) => {
+  const styles = useThemedStyles(makeStyles);
+  return <Text style={styles.label}>{children}</Text>;
+};
 const CustomTextInput: React.FC<CustomTextInputProps> = ({
   value,
   placeholder,
   onChangeText,
   multiline = false,
-}) => (
+}) => {
+  const styles = useThemedStyles(makeStyles);
+  const { colors } = useAppTheme();
+  return (
   <TextInput
     style={[styles.input, multiline && styles.storyInput]}
     value={value}
     placeholder={placeholder}
-    placeholderTextColor="#63708A"
+    placeholderTextColor={colors.placeholder}
     onChangeText={onChangeText}
-    selectionColor="#17233D"
+    selectionColor={colors.primary}
     multiline={multiline}
     textAlignVertical={multiline ? 'top' : 'center'}
   />
-);
+  );
+};
 const CustomDropdown: React.FC<CustomDropdownProps> = ({
   label,
   value,
@@ -68,7 +73,9 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
   isOpen,
   onToggle,
   onSelect,
-}) => (
+}) => {
+  const styles = useThemedStyles(makeStyles);
+  return (
   <View>
     <FormLabel>{label}</FormLabel>
     <Pressable
@@ -92,18 +99,25 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
       </View>
     )}
   </View>
-);
+  );
+};
 
-const HeroCard: React.FC<{ childName: string }> = ({ childName }) => (
-  <LinearGradient colors={["#F4E8F5", "#FFF0DF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.heroCard}>
+const HeroCard: React.FC<{ childName: string }> = ({ childName }) => {
+  const styles = useThemedStyles(makeStyles);
+  const { gradients } = useAppTheme();
+  return (
+  <LinearGradient colors={[...gradients.createHero]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.heroCard}>
     <Text style={styles.heroTitle}>{`A story made just for\n${childName}.`}</Text>
     <Text style={styles.heroDescription}>
       Choose a few details and Suno creates a{`\n`}personalized story in your chosen family{`\n`}voice.
     </Text>
   </LinearGradient>
-);
+  );
+};
 
-const LanguageSelector: React.FC<{ selected: StoryLanguage; onChange: (language: StoryLanguage) => void }> = ({ selected, onChange }) => (
+const LanguageSelector: React.FC<{ selected: StoryLanguage; onChange: (language: StoryLanguage) => void }> = ({ selected, onChange }) => {
+  const styles = useThemedStyles(makeStyles);
+  return (
   <View style={styles.languageRow}>
     {[
       { label: 'हिंदी', value: 'Hindi' as const },
@@ -118,9 +132,11 @@ const LanguageSelector: React.FC<{ selected: StoryLanguage; onChange: (language:
       </Pressable>
     ))}
   </View>
-);
+  );
+};
 export const CreateStoryScreen: React.FC = () => {
   const { child, voices, createNewStory, setCurrentScreen } = useApp();
+  const styles = useThemedStyles(makeStyles);
   const [childName, setChildName] = useState(child.name || 'Aarav');
   const [age, setAge] = useState('3 years');
   const [language, setLanguage] = useState<StoryLanguage>('Hindi');
@@ -242,7 +258,12 @@ export const CreateStoryScreen: React.FC = () => {
             <CustomDropdown
               label="Narrator"
               value={selectedNarrator ? `${selectedNarrator.avatar} ${selectedNarrator.name}` : 'System Voice'}
-              options={['System Voice', ...voices.map((voice) => `${voice.avatar} ${voice.name}`)]}
+              options={[
+                'System Voice',
+                ...voices
+                  .filter((voice) => Boolean(voice.audioUri))
+                  .map((voice) => `${voice.avatar} ${voice.name}`),
+              ]}
               isOpen={openDropdown === 'narrator'}
               onToggle={() => toggleDropdown('narrator')}
               onSelect={(value) => {
@@ -270,32 +291,32 @@ export const CreateStoryScreen: React.FC = () => {
 
 export default CreateStoryScreen;
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => ({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: colors.background,
   },
   header: {
     height: 58,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     paddingHorizontal: 22,
   },
   backButton: {
     width: 36,
     height: 36,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
+    alignItems: 'flex-start' as const,
+    justifyContent: 'center' as const,
   },
   backArrow: {
-    color: theme.colors.textDark,
+    color: colors.textDark,
     fontSize: 34,
-    fontWeight: '300',
+    fontWeight: '300' as const,
     lineHeight: 36,
   },
   headerTitle: {
-    color: theme.colors.textDark,
+    color: colors.textDark,
     ...theme.typography.cardTitle,
   },
   headerSpacer: { width: 36 },
@@ -312,18 +333,18 @@ const styles = StyleSheet.create({
     marginBottom: 19,
   },
   heroTitle: {
-    color: theme.colors.textDark,
+    color: colors.textDark,
     ...theme.typography.hero,
     marginBottom: 12,
   },
   heroDescription: {
     ...theme.typography.body,
-    color: theme.colors.textMuted,
+    color: colors.textMuted,
   },
   formCard: {
-    backgroundColor: theme.colors.cardBg,
-    borderColor: theme.colors.borderLight,
-    borderRadius: theme.borderRadius.card,
+    backgroundColor: colors.cardBg,
+    borderColor: colors.borderLight,
+    borderRadius: borderRadius.card,
     borderWidth: 1,
     padding: 18,
   },
@@ -331,7 +352,7 @@ const styles = StyleSheet.create({
   lastField: { marginBottom: 1 },
   label: {
     ...theme.typography.section,
-    color: theme.colors.textDark,
+    color: colors.textDark,
     marginBottom: 8,
   },
   storyInput: {
@@ -340,97 +361,90 @@ const styles = StyleSheet.create({
   },
   input: {
     minHeight: 51,
-    borderColor: theme.colors.borderLight,
+    borderColor: colors.borderLight,
     borderRadius: 13,
     borderWidth: 1,
-    backgroundColor: theme.colors.cardBg,
-    color: theme.colors.textDark,
+    backgroundColor: colors.cardBg,
+    color: colors.textDark,
     paddingHorizontal: 14,
     paddingVertical: 13,
     ...theme.typography.body,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
   },
-  inputText: { ...theme.typography.body, color: theme.colors.textDark },
+  inputText: { ...theme.typography.body, color: colors.textDark },
   dropdownField: {
     minHeight: 52,
-    borderColor: theme.colors.borderLight,
+    borderColor: colors.borderLight,
     borderRadius: 12,
     borderWidth: 1,
-    backgroundColor: theme.colors.cardBg,
-    paddingHorizontal: theme.spacing.md,
+    backgroundColor: colors.cardBg,
+    paddingHorizontal: spacing.md,
     paddingVertical: 13,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
   },
   chevron: {
-    color: theme.colors.textMuted,
+    color: colors.textMuted,
     fontSize: 22,
     lineHeight: 18,
     marginTop: -5,
   },
   languageRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
   },
   languagePill: {
     minHeight: 44,
-    paddingHorizontal: theme.spacing.md,
-    borderColor: theme.colors.borderLight,
+    paddingHorizontal: spacing.md,
+    borderColor: colors.borderLight,
     borderRadius: 22,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.cardBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: colors.cardBg,
   },
   selectedLanguage: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
-  selectedLanguageText: { color: '#FFFFFF' },
+  selectedLanguageText: { color: colors.onPrimary },
   languageText: {
     ...theme.typography.badge,
-    color: theme.colors.textDark,
+    color: colors.textDark,
   },
   inlineOptions: {
-    backgroundColor: theme.colors.cardBg,
-    borderColor: theme.colors.borderLight,
+    backgroundColor: colors.cardBg,
+    borderColor: colors.borderLight,
     borderRadius: 12,
     borderWidth: 1,
     marginTop: 6,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   option: {
     minHeight: 48,
-    justifyContent: 'center',
-    paddingHorizontal: theme.spacing.md,
+    justifyContent: 'center' as const,
+    paddingHorizontal: spacing.md,
     borderRadius: 8,
   },
-  selectedOption: { backgroundColor: theme.colors.purpleLightBg },
+  selectedOption: { backgroundColor: colors.purpleLightBg },
   optionText: {
     ...theme.typography.body,
-    color: theme.colors.textDark,
+    color: colors.textDark,
   },
   createButton: {
     minHeight: 52,
-    marginTop: theme.spacing.md,
+    marginTop: spacing.md,
     borderRadius: 14,
-    backgroundColor: theme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   createButtonText: {
     ...theme.typography.section,
-    color: '#FFFFFF',
-  },
-  loaderContainer: {
-    flex: 1,
-    backgroundColor: '#FCF8F4',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
+    color: colors.onPrimary,
   },
 });

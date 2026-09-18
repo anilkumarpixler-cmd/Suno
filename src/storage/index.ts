@@ -8,4 +8,4 @@ export {
 	clearStories,
 } from './storyStorage';
 
-export type { Story } from '../app/Types';
+export type { Story } from '../Types';

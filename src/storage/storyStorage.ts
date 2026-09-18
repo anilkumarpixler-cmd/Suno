@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Story } from '../app/Types';
+import { Story } from '../Types';
 
 export const STORIES_STORAGE_KEY = '@suno_stories';
 

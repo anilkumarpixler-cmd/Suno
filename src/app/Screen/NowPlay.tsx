@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useApp } from '../Context/AppContext';
-import { Header } from '../components/Common/header';
-import { theme } from '../Theme/Index';
+import { useApp } from '@/Context/AppContext';
+import { Header } from '@/components/Common/header';
+import { borderRadius, spacing, theme, ThemeColors } from '@/Theme/Index';
+import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { PLAYBACK_SPEEDS } from '@/hooks/useStoryPlayer';
 
 interface NarratorCardProps {
   avatar: string;
@@ -12,7 +14,9 @@ interface NarratorCardProps {
   languages: string;
 }
 
-export const NarratorCard: React.FC<NarratorCardProps> = ({ avatar, name, languages }) => (
+export const NarratorCard: React.FC<NarratorCardProps> = ({ avatar, name, languages }) => {
+  const styles = useThemedStyles(makeStyles);
+  return (
   <View style={styles.narratorCard}>
     <View style={styles.narratorAvatarCircle}>
       <Text style={styles.avatar}>{avatar}</Text>
@@ -25,7 +29,8 @@ export const NarratorCard: React.FC<NarratorCardProps> = ({ avatar, name, langua
       <Text style={styles.check}>✓</Text>
     </View>
   </View>
-);
+  );
+};
 
 export const NowPlayingScreen: React.FC = () => {
   const {
@@ -43,12 +48,18 @@ export const NowPlayingScreen: React.FC = () => {
     duration: trackDuration,
     setCurrentScreen,
     openNarratorPicker,
+    playbackSpeed,
+    setPlaybackSpeed,
   } = useApp();
+  const { gradients } = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const [barWidth, setBarWidth] = useState(1);
+  const [speedOpen, setSpeedOpen] = useState(false);
 
   if (!activeStory) return null;
 
   const narrator = voices.find((v) => v.id === activeStory.narratorId);
+  const speedLabel = `${playbackSpeed}x`;
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -74,13 +85,50 @@ export const NowPlayingScreen: React.FC = () => {
       <ScrollView contentContainerStyle={styles.content}>
         {/* Main Player Box */}
         <View style={styles.playerCard}>
-          <LinearGradient colors={theme.gradients.playerArt} style={styles.artBox}>
+          <TouchableOpacity
+            style={styles.speedIconBtn}
+            onPress={() => setSpeedOpen((open) => !open)}
+            accessibilityRole="button"
+            accessibilityLabel={`Playback speed ${speedLabel}`}>
+            <Text style={styles.speedIconMark}>⏱</Text>
+            <Text style={styles.speedIconLabel}>{speedLabel}</Text>
+          </TouchableOpacity>
+
+          {speedOpen ? (
+            <View style={styles.speedMenu}>
+              {PLAYBACK_SPEEDS.map((speed) => {
+                const selected = playbackSpeed === speed;
+                return (
+                  <TouchableOpacity
+                    key={speed}
+                    style={[styles.speedOption, selected && styles.speedOptionSelected]}
+                    onPress={() => {
+                      setPlaybackSpeed(speed);
+                      setSpeedOpen(false);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`${speed}x`}>
+                    <Text style={[styles.speedOptionText, selected && styles.speedOptionTextSelected]}>
+                      {speed}x
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : null}
+
+          <LinearGradient colors={gradients.playerArt} style={styles.artBox}>
             <Text style={styles.artEmoji}>{activeStory.artwork}</Text>
           </LinearGradient>
 
           <Text style={styles.title}>{activeStory.title}</Text>
           <Text style={styles.subtitle}>
-            {activeStory.category} • {duration < 60 ? `${duration}s` : `${Math.round(duration / 60)} min`}
+            {isPreparingAudio
+              ? `Cloning ${narrator?.name || 'narrator'}…`
+              : narrator
+                ? `${activeStory.category} • ${narrator.name}`
+                : `${activeStory.category} • System Voice`}
           </Text>
 
           {/* Slider Bar */}
@@ -126,7 +174,13 @@ export const NowPlayingScreen: React.FC = () => {
           <NarratorCard
             avatar={narrator?.avatar || '👤'}
             name={narrator?.name || 'System Voice'}
-            languages={(narrator?.languages || []).join(' · ') || 'Device speech'}
+            languages={
+              isPreparingAudio
+                ? 'Cloning voice'
+                : narrator
+                  ? (narrator.languages || []).join(' · ') || 'Cloned voice'
+                  : 'Device speech'
+            }
           />
           <TouchableOpacity
             style={styles.changeNarratorButton}
@@ -143,92 +197,137 @@ export const NowPlayingScreen: React.FC = () => {
 
 export default NowPlayingScreen;
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
-  content: { padding: theme.spacing.md },
+const makeStyles = (colors: ThemeColors) => ({
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.md },
   heart: { fontSize: 22 },
   playerCard: {
-    backgroundColor: theme.colors.playerBg,
-    borderRadius: theme.borderRadius.card,
-    padding: theme.spacing.lg,
-    alignItems: 'center',
-    overflow: 'hidden',
+    backgroundColor: colors.playerBg,
+    borderRadius: borderRadius.card,
+    padding: spacing.lg,
+    paddingTop: 48,
+    alignItems: 'center' as const,
+    overflow: 'hidden' as const,
+    position: 'relative' as const,
   },
   artBox: {
     width: 180,
     height: 180,
     borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: theme.spacing.md,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginBottom: spacing.md,
   },
   artEmoji: { fontSize: 80 },
-  title: { ...theme.typography.hero, fontSize: 24, lineHeight: 30, color: '#FFFFFF', textAlign: 'center' },
-  subtitle: { ...theme.typography.body, color: '#A0AEC0', marginTop: 4, marginBottom: theme.spacing.md },
-  sliderBg: { width: '100%', height: 6, backgroundColor: '#32324D', borderRadius: 3, overflow: 'hidden' },
-  sliderFill: { height: '100%', backgroundColor: theme.colors.primary },
+  title: { ...theme.typography.hero, fontSize: 24, lineHeight: 30, color: colors.playerText, textAlign: 'center' as const },
+  subtitle: { ...theme.typography.body, color: colors.playerMuted, marginTop: 4, marginBottom: spacing.md },
+  sliderBg: { width: '100%' as const, height: 6, backgroundColor: colors.sliderTrack, borderRadius: 3, overflow: 'hidden' as const },
+  sliderFill: { height: '100%' as const, backgroundColor: colors.primary },
   timeRow: {
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: theme.spacing.xs,
-    marginBottom: theme.spacing.md,
+    width: '100%' as const,
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
   },
-  timeText: { ...theme.typography.caption, color: '#A0AEC0' },
-  controlsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '80%' },
-  ctrlIcon: { fontSize: 22, color: '#FFFFFF' },
+  timeText: { ...theme.typography.caption, color: colors.playerMuted },
+  controlsRow: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, width: '80%' as const },
+  ctrlIcon: { fontSize: 22, color: colors.playerText },
   mainPlayBtn: {
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: theme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  mainPlayIcon: { color: '#FFFFFF', fontSize: 24 },
-  narratorSection: { marginTop: theme.spacing.lg },
-  narratorHeader: { ...theme.typography.section, color: theme.colors.textDark, marginBottom: theme.spacing.sm },
+  mainPlayIcon: { color: colors.onPrimary, fontSize: 24 },
+  speedIconBtn: {
+    position: 'absolute' as const,
+    top: 12,
+    right: 12,
+    zIndex: 3,
+    minWidth: 64,
+    height: 32,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#4A4A68',
+    backgroundColor: '#2A2A44',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 4,
+  },
+  speedIconMark: { fontSize: 13, color: colors.playerText },
+  speedIconLabel: { ...theme.typography.caption, color: colors.playerText, fontWeight: '700' as const },
+  speedMenu: {
+    position: 'absolute' as const,
+    top: 48,
+    right: 12,
+    zIndex: 4,
+    width: 72,
+    padding: 6,
+    borderRadius: 14,
+    backgroundColor: '#2A2A44',
+    borderWidth: 1,
+    borderColor: '#4A4A68',
+    gap: 4,
+  },
+  speedOption: {
+    height: 30,
+    borderRadius: 10,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  speedOptionSelected: {
+    backgroundColor: colors.primary,
+  },
+  speedOptionText: { ...theme.typography.caption, color: colors.playerMuted, fontWeight: '700' as const },
+  speedOptionTextSelected: { color: colors.onPrimary },
+  narratorSection: { marginTop: spacing.lg },
+  narratorHeader: { ...theme.typography.section, color: colors.textDark, marginBottom: spacing.sm },
   narratorCard: {
-    backgroundColor: theme.colors.cardBg,
-    borderColor: theme.colors.borderLight,
+    backgroundColor: colors.cardBg,
+    borderColor: colors.borderLight,
     borderRadius: 20,
     borderWidth: 1,
     height: 90,
-    padding: theme.spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
+    padding: spacing.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   narratorAvatarCircle: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#F1E9FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: theme.spacing.sm,
+    backgroundColor: colors.purpleLightBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginRight: spacing.sm,
   },
   avatar: { fontSize: 27 },
   narratorDetails: { flex: 1 },
-  narratorName: { ...theme.typography.cardTitle, color: theme.colors.textDark },
-  languages: { ...theme.typography.body, color: '#746C88', marginTop: 4 },
+  narratorName: { ...theme.typography.cardTitle, color: colors.textDark },
+  languages: { ...theme.typography.body, color: colors.textMuted, marginTop: 4 },
   selectedIndicator: {
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: '#36B37E',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.success,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  check: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  check: { color: colors.onPrimary, fontSize: 16, fontWeight: '800' as const },
   changeNarratorButton: {
     height: 50,
     marginTop: 12,
-    borderColor: theme.colors.borderLight,
+    borderColor: colors.borderLight,
     borderRadius: 15,
     borderWidth: 1,
-    backgroundColor: theme.colors.cardBg,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.cardBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  changeNarratorText: { ...theme.typography.section, color: theme.colors.textDark },
+  changeNarratorText: { ...theme.typography.section, color: colors.textDark },
 });

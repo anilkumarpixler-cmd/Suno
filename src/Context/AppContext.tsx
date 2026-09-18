@@ -10,7 +10,7 @@ import {
   setDefaultVoiceOnServer,
   uploadVoice,
 } from '../services/sunoApi';
-import { getStories, saveStory, updateStory } from '../../storage';
+import { getStories, saveStory, updateStory } from '../storage';
 
 type AppContextType = {
   currentScreen: RootScreen;
@@ -24,6 +24,8 @@ type AppContextType = {
   isPreparingAudio: boolean;
   currentTime: number;
   duration: number;
+  playbackSpeed: number;
+  setPlaybackSpeed: (speed: number) => void;
   playStory: (story: Story, autoPlay?: boolean) => void;
   togglePlayPause: () => void;
   seekTo: (time: number) => void;
@@ -90,11 +92,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     playNextStory,
     playPreviousStory,
     restartSpeech,
+    playbackSpeed,
+    setPlaybackSpeed,
   } = useStoryPlayer({
     stories,
     voices,
     currentScreen,
     setCurrentScreen: navigateToScreen,
+    onClonedAudio: (storyId, audioUrl, duration, voiceId, language) => {
+      const updates = {
+        audioUri: audioUrl,
+        duration,
+        clonedVoiceId: voiceId,
+        clonedLanguage: language,
+        progress: 0,
+      };
+      void updateStory(storyId, updates);
+      setStories((currentStories) =>
+        currentStories.map((story) => (story.id === storyId ? { ...story, ...updates } : story))
+      );
+      setActiveStory((currentStory) =>
+        currentStory?.id === storyId ? { ...currentStory, ...updates } : currentStory
+      );
+    },
   });
 
   useEffect(() => {
@@ -185,8 +205,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         : stories.find((story) => story.id === storyId);
     if (!current) return;
 
-    const nextStory = { ...current, narratorId: voiceId };
-    void updateStory(storyId, { narratorId: voiceId });
+    const nextStory = {
+      ...current,
+      narratorId: voiceId,
+      audioUri: undefined,
+      clonedVoiceId: undefined,
+      clonedLanguage: undefined,
+      progress: 0,
+    };
+    void updateStory(storyId, {
+      narratorId: voiceId,
+      audioUri: undefined,
+      clonedVoiceId: undefined,
+      clonedLanguage: undefined,
+      progress: 0,
+    });
     setStories((currentStories) =>
       currentStories.map((story) => (story.id === storyId ? nextStory : story))
     );
@@ -237,6 +270,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isPreparingAudio,
         currentTime,
         duration,
+        playbackSpeed,
+        setPlaybackSpeed,
         playStory,
         togglePlayPause,
         seekTo,

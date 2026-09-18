@@ -35,6 +35,8 @@ export interface Story {
   narratorId: string;
   artwork: string;
   audioUri?: string;
+  clonedVoiceId?: string;
+  clonedLanguage?: string;
   progress: number; // in seconds
   isFavorite?: boolean;
   script: string;
