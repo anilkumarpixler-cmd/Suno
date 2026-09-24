@@ -21,7 +21,7 @@ import { borderRadius, spacing, theme, ThemeColors } from '@/Theme/Index';
 import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { deleteVoiceRecording } from '@/storage/voiceAudio';
-
+import {showToast} from '@/components/Common/Toast';
 const LANGUAGE_OPTIONS = ['Hindi + English', 'Hindi', 'English', 'Punjabi', 'Gujarati'];
 
 const formatTime = (seconds: number) => {
@@ -150,9 +150,11 @@ export const AddVoiceScreen: React.FC = () => {
     try {
       await addVoice(name, selectedLang.split(' + '), recordedUri);
       setCurrentScreen('Voices');
+      showToast('Voice saved successfully');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not save this voice. Please try again.';
       Alert.alert('Save error', message);
+
     }
   };
 

@@ -33,14 +33,16 @@ export const Toast = () => (
 
 const makeStyles = (colors: ThemeColors) => ({
   toast: {
-    backgroundColor: colors.textDark,
+    backgroundColor: colors.toastBg,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 12,
     maxWidth: '90%' as const,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
   toastText: {
     ...theme.typography.body,
-    color: colors.background,
+    color: colors.toastText,
   },
 });

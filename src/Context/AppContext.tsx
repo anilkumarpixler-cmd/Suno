@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { router } from 'expo-router';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { router, usePathname } from 'expo-router';
 import { Child, CreateStoryInput, RootScreen, Story, Voice } from '../Types';
 import { initialChild, initialStories, initialVoices } from '../Data/mockData';
 import { useStoryPlayer } from '../hooks/useStoryPlayer';
@@ -26,6 +26,8 @@ type AppContextType = {
   duration: number;
   playbackSpeed: number;
   setPlaybackSpeed: (speed: number) => void;
+  isRepeat: boolean;
+  toggleRepeat: () => void;
   playStory: (story: Story, autoPlay?: boolean) => void;
   togglePlayPause: () => void;
   seekTo: (time: number) => void;
@@ -51,6 +53,7 @@ const screenRoutes: Record<RootScreen, string> = {
   Profile: '/Screen/ProfilePage',
   NowPlaying: '/Screen/NowPlay',
   AddVoice: '/Screen/AddVoicePage',
+  Favorites: '/Screen/FavoritesPage',
   GenerationLoader: '/Screen/CreateStoryPage',
 };
 
@@ -64,13 +67,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
   const [narratorPickerStoryId, setNarratorPickerStoryId] = useState<string | null>(null);
 
+  const pathname = usePathname();
+  const targetRouteRef = useRef(pathname);
+
+  useEffect(() => {
+    targetRouteRef.current = pathname;
+  }, [pathname]);
+
   const navigateToScreen = (screen: RootScreen) => {
     if (screen !== 'Voices' && screen !== 'AddVoice') {
       setNarratorPickerStoryId(null);
     }
-    if (currentScreen === screen) return;
     setCurrentScreenState(screen);
-    router.replace(screenRoutes[screen] as never);
+    const route = screenRoutes[screen];
+    // Ignore repeated presses for the route we're already on (or already navigating to).
+    if (targetRouteRef.current === route) return;
+    targetRouteRef.current = route;
+    router.replace(route as never);
   };
 
   const openNarratorPicker = (storyId: string) => {
@@ -94,6 +107,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     restartSpeech,
     playbackSpeed,
     setPlaybackSpeed,
+    isRepeat,
+    toggleRepeat,
   } = useStoryPlayer({
     stories,
     voices,
@@ -272,6 +287,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         duration,
         playbackSpeed,
         setPlaybackSpeed,
+        isRepeat,
+        toggleRepeat,
         playStory,
         togglePlayPause,
         seekTo,

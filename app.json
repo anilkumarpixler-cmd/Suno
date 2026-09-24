@@ -1,49 +1,67 @@
 {
   "expo": {
-    "name": "Suno_Stories",
+    "name": "Suno Story",
     "slug": "Suno_Stories",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/suno icon sm.png",
     "scheme": "sunostories",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.arashdeepkaur.SunoStories"
     },
     "android": {
-      "usesCleartextTraffic": true,
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/suno icon.png",
+        "backgroundImage": "./assets/images/suno icon.png",
+        "monochromeImage": "./assets/images/suno icon.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.arashdeepkaur.Suno_Stories"
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/suno icon sm.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-audio",
         {
-          "microphonePermission": "Allow Suno Stories to record family voices."
+          "microphonePermission": "Allow Suno Stories to record family voices.",
+          "enableBackgroundPlayback": true
         }
       ],
       [
         "expo-splash-screen",
         {
           "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/suno icon sm.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      "expo-image",
+      "expo-web-browser",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6886d0cb-dec4-437c-96e8-025cf9e47b08"
+      }
     }
   }
 }

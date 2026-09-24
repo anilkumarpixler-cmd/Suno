@@ -50,7 +50,6 @@ export const HomeScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         ListHeaderComponent={
           <>
-            {/* Hero Card */}
             <LinearGradient colors={gradients.hero} style={styles.heroCard}>
               <View style={styles.heroTextContainer}>
                 <Text style={styles.heroTitle}>Stories in the voices they love.</Text>
@@ -61,7 +60,6 @@ export const HomeScreen: React.FC = () => {
               <Text style={styles.heroEmoji}>📚</Text>
             </LinearGradient>
 
-            {/* Section Header & Pills */}
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Stories for {child.name}</Text>
               <TouchableOpacity
@@ -90,7 +88,7 @@ export const HomeScreen: React.FC = () => {
                 );
               })}
             </ScrollView>
-            {/* Continue Listening */}
+
             {continueStory && (
               <View style={styles.section}>
                 <Text style={styles.subSectionTitle}>Continue listening</Text>
@@ -98,7 +96,7 @@ export const HomeScreen: React.FC = () => {
                   story={continueStory}
                   variant="continue"
                   narrator={voices.find((v) => v.id === continueStory.narratorId)}
-                  onPress={() => playStory(continueStory, false)}
+                  onPress={() => playStory(continueStory, true)}
                 />
               </View>
             )}
@@ -163,17 +161,16 @@ const makeStyles = (colors: ThemeColors) => ({
   },
   subSectionTitle: { ...theme.typography.hero, fontSize: 24, lineHeight: 30, color: colors.textDark, marginBottom: spacing.sm },
   popularTitle: { marginTop: spacing.xs },
-  pillsScroll: { marginBottom: spacing.md },
+  pillsScroll: { marginBottom: spacing.md, height: 30 },
   pill: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: borderRadius.pill,
     backgroundColor: colors.pillBg,
     marginRight: 8,
-
   },
   activePill: { backgroundColor: colors.primary },
   pillText: { ...theme.typography.badge, color: colors.textDark, fontSize: 16 },
-  activePillText: { ...theme.typography.badge, color: colors.onPrimary ,fontSize:18},
+  activePillText: { ...theme.typography.badge, color: colors.onPrimary, fontSize: 18 },
   section: { marginTop: spacing.xs },
 });

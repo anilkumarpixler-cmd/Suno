@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useEffect, useRef, useState } from 'react';
 import { RootScreen, Story, Voice } from '../Types';
 import { convertStory } from '../services/sunoApi';
 import { showToast } from '../components/Common/Toast';
+import { useLockScreenControls } from './useLockScreenControls';
 import {
   estimateDuration,
   languageToLocale,
@@ -53,6 +54,9 @@ export const useStoryPlayer = ({
   const [duration, setDuration] = useState(1);
   const [playbackSource, setPlaybackSource] = useState<PlaybackSource>('idle');
   const [playbackSpeed, setPlaybackSpeedState] = useState<PlaybackSpeed>(1);
+  const [isRepeat, setIsRepeat] = useState(false);
+  // True from the first server track until playback goes idle / falls back to device speech.
+  const [hasServerSession, setHasServerSession] = useState(false);
 
   const player = useAudioPlayer(null, { updateInterval: 250 });
   const status = useAudioPlayerStatus(player);
@@ -66,10 +70,20 @@ export const useStoryPlayer = ({
   const pendingStartRef = useRef(0);
   const awaitingPlayRef = useRef(false);
   const playbackSpeedRef = useRef<PlaybackSpeed>(1);
+  const isRepeatRef = useRef(false);
   const storiesRef = useRef(stories);
   const endingRef = useRef(false);
   const hasStartedRef = useRef(false);
   const onStoryEndedRef = useRef<() => void>(() => undefined);
+
+  useEffect(() => {
+    // Silent mode + background playback. `doNotMix` is required for lock screen controls.
+    void setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      interruptionMode: 'doNotMix',
+    }).catch(() => undefined);
+  }, []);
 
   const applyPlayerRate = (speed: PlaybackSpeed) => {
     try {
@@ -86,6 +100,8 @@ export const useStoryPlayer = ({
   const setSource = (source: PlaybackSource) => {
     playbackSourceRef.current = source;
     setPlaybackSource(source);
+    if (source === 'server') setHasServerSession(true);
+    else if (source !== 'preparing') setHasServerSession(false);
   };
 
   const setTime = (time: number) => {
@@ -157,7 +173,7 @@ export const useStoryPlayer = ({
     });
   };
 
-  const startClonedPlayback = async (audioUrl: string, trackDuration: number, resumeAt: number) => {
+  const startClonedPlayback = (audioUrl: string, trackDuration: number, resumeAt: number) => {
     setSource('server');
     setAudioDuration(trackDuration);
     const start =
@@ -166,10 +182,8 @@ export const useStoryPlayer = ({
     awaitingPlayRef.current = true;
     hasStartedRef.current = false;
     setTime(start);
-    const replaced = player.replace(audioUrl);
-    if (replaced && typeof (replaced as Promise<unknown>).then === 'function') {
-      await replaced;
-    }
+    // replace() loads synchronously; the status effect below starts playback once loaded.
+    player.replace(audioUrl);
   };
 
   const playClonedAudio = async (story: Story, voice: Voice, resumeAt: number, speakId: number) => {
@@ -197,7 +211,7 @@ export const useStoryPlayer = ({
         };
       }
 
-      await startClonedPlayback(result.audioUrl, result.duration, resumeAt);
+      startClonedPlayback(result.audioUrl, result.duration, resumeAt);
     } catch (error) {
       if (speakId !== speakIdRef.current) return;
       const message = error instanceof Error ? error.message : 'Voice clone failed';
@@ -372,6 +386,7 @@ export const useStoryPlayer = ({
     storyRef.current = story;
     shouldPlayRef.current = true;
     setIsPlaying(true);
+    setTime(0);
     speakRemaining(story, 0);
   };
 
@@ -385,6 +400,15 @@ export const useStoryPlayer = ({
       if (playbackSourceRef.current === 'preparing') return;
       endingRef.current = true;
       setTime(durationRef.current);
+
+      if (shouldPlayRef.current && isRepeatRef.current && storyRef.current) {
+        const story = storyRef.current;
+        setTime(0);
+        endingRef.current = false;
+        restartSpeech(story);
+        return;
+      }
+
       if (shouldPlayRef.current && playNextStory(false)) return;
       shouldPlayRef.current = false;
       setIsPlaying(false);
@@ -394,6 +418,14 @@ export const useStoryPlayer = ({
       endingRef.current = false;
     };
   });
+
+  const toggleRepeat = () => {
+    setIsRepeat((prev) => {
+      const next = !prev;
+      isRepeatRef.current = next;
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (playbackSource !== 'server' || !shouldPlayRef.current || !awaitingPlayRef.current) return;
@@ -422,6 +454,16 @@ export const useStoryPlayer = ({
     }
   }, [playbackSource, status.currentTime, status.duration]);
 
+  // Native media card: stays up while the next story is prepared after a server track,
+  // so auto-next / previous update it in place instead of dropping it.
+  useLockScreenControls(player, {
+    active:
+      Boolean(activeStory) &&
+      (playbackSource === 'server' || (playbackSource === 'preparing' && hasServerSession)),
+    story: activeStory,
+    narratorName: activeStory ? resolveNarrator(activeStory)?.name : undefined,
+  });
+
   useEffect(() => {
     if (playbackSource !== 'server' || !status.didJustFinish) return;
     if (awaitingPlayRef.current || !hasStartedRef.current) return;
@@ -434,6 +476,7 @@ export const useStoryPlayer = ({
 
     const total = storyDuration(activeStory);
     const interval = setInterval(() => {
+      if (endingRef.current) return;
       const nextTime = currentTimeRef.current + playbackSpeedRef.current;
       if (nextTime >= total) {
         onStoryEndedRef.current();
@@ -492,6 +535,8 @@ export const useStoryPlayer = ({
     duration,
     playbackSpeed,
     setPlaybackSpeed,
+    isRepeat,
+    toggleRepeat,
     playStory,
     togglePlayPause,
     seekTo,

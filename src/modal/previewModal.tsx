@@ -1,9 +1,12 @@
-import {
-  View,
-  Text,
-  Pressable,
-  Modal,
-} from 'react-native';
+import { useEffect } from 'react';
+import { View, Text, Pressable, Modal } from 'react-native';
+import Animated, {
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import { theme, ThemeColors } from '../Theme/Index';
 import { useThemedStyles } from '../Theme/ThemeProvider';
 
@@ -12,6 +15,7 @@ type PreviewModalProps = {
   handleStopPreview: () => void;
   previewUri: string | null;
   setPreviewUri: (uri: string | null) => void;
+  isPlaying: boolean;
   visible?: boolean;
 };
 
@@ -20,8 +24,24 @@ export const PreviewModal = ({
   handleStopPreview,
   previewUri,
   setPreviewUri,
+  isPlaying,
 }: PreviewModalProps) => {
   const styles = useThemedStyles(makeStyles);
+  const scale = useSharedValue(1);
+
+  useEffect(() => {
+    if (isPlaying) {
+      scale.value = withRepeat(withTiming(1.05, { duration: 600 }), -1, true);
+      return;
+    }
+    cancelAnimation(scale);
+    scale.value = withTiming(1, { duration: 150 });
+  }, [isPlaying, scale]);
+
+  const playButtonStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
   return (
     <Modal
       visible={previewUri !== null}
@@ -33,11 +53,23 @@ export const PreviewModal = ({
         <View style={styles.previewPlayer}>
           <Text style={styles.previewTitle}>Voice Preview</Text>
 
-          <Pressable style={styles.previewPlayButton} onPress={handlePlayPreview}>
-            <Text style={styles.previewButtonText}>▶ Play</Text>
-          </Pressable>
+          <Animated.View style={[styles.previewPlayButton, playButtonStyle]}>
+            <Pressable
+              style={styles.previewPlayPressable}
+              onPress={handlePlayPreview}
+              accessibilityRole="button"
+              accessibilityLabel={isPlaying ? 'Playing' : 'Play preview'}>
+              <Text style={styles.previewButtonText}>
+                {isPlaying ? 'Playing…' : '▶ Play'}
+              </Text>
+            </Pressable>
+          </Animated.View>
 
-          <Pressable style={styles.previewStopButton} onPress={handleStopPreview}>
+          <Pressable
+            style={styles.previewStopButton}
+            onPress={handleStopPreview}
+            accessibilityRole="button"
+            accessibilityLabel="Stop preview">
             <Text style={styles.previewStopText}>■ Stop</Text>
           </Pressable>
 
@@ -78,21 +110,27 @@ const makeStyles = (colors: ThemeColors) => ({
   },
   previewPlayButton: {
     width: '100%' as const,
-    paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: colors.textDark,
-    alignItems: 'center' as const,
+    backgroundColor: colors.primary,
     marginBottom: 12,
+    overflow: 'hidden' as const,
+  },
+  previewPlayPressable: {
+    width: '100%' as const,
+    paddingVertical: 14,
+    alignItems: 'center' as const,
   },
   previewButtonText: {
     ...theme.typography.section,
-    color: colors.background,
+    color: colors.onPrimary,
   },
   previewStopButton: {
     width: '100%' as const,
     paddingVertical: 14,
     borderRadius: 12,
     backgroundColor: colors.pillBg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
     alignItems: 'center' as const,
     marginBottom: 12,
   },

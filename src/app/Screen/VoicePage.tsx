@@ -7,7 +7,8 @@ import { spacing, theme, ThemeColors } from '@/Theme/Index';
 import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 import { showToast } from '@/components/Common/Toast';
 import { Voice } from '@/Types';
-import { useAudioPlayer } from 'expo-audio';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { ConfirmModal } from '@/modal/confirmModal';
 import { PreviewModal } from '@/modal/previewModal';
 
 interface VoiceCardProps {
@@ -92,7 +93,10 @@ export const FamilyVoicesScreen: React.FC = () => {
       (activeStory?.id === narratorPickerStoryId ? activeStory.narratorId : undefined)
     : voices.find((voice) => voice.isDefault)?.id;
   const [previewUri, setPreviewUri] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const player = useAudioPlayer(previewUri ?? undefined);
+  const status = useAudioPlayerStatus(player);
+  const pendingVoice = voices.find((item) => item.id === pendingDeleteId);
 
   useEffect(() => {
     if (previewUri) player.replace(previewUri);
@@ -139,18 +143,19 @@ export const FamilyVoicesScreen: React.FC = () => {
   };
 
   const handleDeleteVoice = (voiceId: string) => {
-    const voice = voices.find((item) => item.id === voiceId);
-    Alert.alert('Delete voice', `Remove ${voice?.name ?? 'this voice'}? This cannot be undone.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          if (previewUri && voice?.audioUri === previewUri) setPreviewUri(null);
-          void deleteVoice(voiceId);
-        },
-      },
-    ]);
+    setPendingDeleteId(voiceId);
+  };
+
+  const handleCancelDelete = () => {
+    setPendingDeleteId(null);
+  };
+
+  const handleConfirmDelete = () => {
+    const voice = voices.find((item) => item.id === pendingDeleteId);
+    if (previewUri && voice?.audioUri === previewUri) setPreviewUri(null);
+    showToast(`${voice?.name ?? 'Voice'} deleted..`);
+    if (pendingDeleteId) void deleteVoice(pendingDeleteId);
+    setPendingDeleteId(null);
   };
 
   return (
@@ -191,12 +196,21 @@ export const FamilyVoicesScreen: React.FC = () => {
           <PreviewModal
             visible={previewUri !== null}
             previewUri={previewUri}
+            isPlaying={status.playing}
             setPreviewUri={(uri: string | null) => {
               if (!uri) handleStopPreview();
               setPreviewUri(uri);
             }}
             handlePlayPreview={handlePlayPreview}
             handleStopPreview={handleStopPreview}
+          />
+
+          <ConfirmModal
+            visible={pendingDeleteId !== null}
+            title="Delete voice"
+            message={`Remove ${pendingVoice?.name ?? 'this voice'}? This cannot be undone.`}
+            onCancel={handleCancelDelete}
+            onConfirm={handleConfirmDelete}
           />
 
         {isPicker && (

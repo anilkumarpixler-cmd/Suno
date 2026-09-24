@@ -33,7 +33,8 @@ export interface Story {
   category: Category;
   duration: number; // in seconds
   narratorId: string;
-  artwork: string;
+  artwork: string; // emoji shown in the app UI
+  artworkUrl?: string; // image URL for the lock screen / notification card (app icon if absent)
   audioUri?: string;
   clonedVoiceId?: string;
   clonedLanguage?: string;
@@ -50,11 +51,12 @@ export interface PlayerState {
   currentStory: Story | null;
 }
 
-export type RootScreen = 
-  | 'Home' 
-  | 'Voices' 
-  | 'Create' 
-  | 'Profile' 
-  | 'NowPlaying' 
-  | 'AddVoice' 
+export type RootScreen =
+  | 'Home'
+  | 'Voices'
+  | 'Create'
+  | 'Profile'
+  | 'NowPlaying'
+  | 'AddVoice'
+  | 'Favorites'
   | 'GenerationLoader';

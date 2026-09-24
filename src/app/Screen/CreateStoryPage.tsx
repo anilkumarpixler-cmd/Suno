@@ -1,16 +1,8 @@
 import React, { useState } from 'react';
-import {
-  LayoutAnimation,
-  Pressable,
-  Platform,
-  ScrollView,
-  Text,
-  TextInput,
-  UIManager,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '@/Context/AppContext';
+import { CustomDropdown } from '@/components/Common/CustomDropdown';
 import { borderRadius, spacing, theme, ThemeColors } from '@/Theme/Index';
 import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 import { StoryLanguage } from '@/Types';
@@ -18,87 +10,32 @@ import { getFallbackScript, mapStoryTypeToCategory } from '@/services/storySpeec
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { showToast } from '@/components/Common/Toast';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+type DropdownKey = 'age' | 'storyType' | 'narrator';
 
-interface FormLabelProps {
-  children: string;
-}
+const FormLabel: React.FC<{ children: string }> = ({ children }) => {
+  const styles = useThemedStyles(makeStyles);
+  return <Text style={styles.label}>{children}</Text>;
+};
 
-interface CustomTextInputProps {
+const CustomTextInput: React.FC<{
   value: string;
   placeholder?: string;
   onChangeText: (value: string) => void;
   multiline?: boolean;
-}
-interface CustomDropdownProps {
-  label: string;
-  value: string;
-  options: string[];
-  isOpen: boolean;
-  onToggle: () => void;
-  onSelect: (value: string) => void;
-}
-
-const FormLabel: React.FC<FormLabelProps> = ({ children }) => {
-  const styles = useThemedStyles(makeStyles);
-  return <Text style={styles.label}>{children}</Text>;
-};
-const CustomTextInput: React.FC<CustomTextInputProps> = ({
-  value,
-  placeholder,
-  onChangeText,
-  multiline = false,
-}) => {
+}> = ({ value, placeholder, onChangeText, multiline = false }) => {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useAppTheme();
   return (
-  <TextInput
-    style={[styles.input, multiline && styles.storyInput]}
-    value={value}
-    placeholder={placeholder}
-    placeholderTextColor={colors.placeholder}
-    onChangeText={onChangeText}
-    selectionColor={colors.primary}
-    multiline={multiline}
-    textAlignVertical={multiline ? 'top' : 'center'}
-  />
-  );
-};
-const CustomDropdown: React.FC<CustomDropdownProps> = ({
-  label,
-  value,
-  options,
-  isOpen,
-  onToggle,
-  onSelect,
-}) => {
-  const styles = useThemedStyles(makeStyles);
-  return (
-  <View>
-    <FormLabel>{label}</FormLabel>
-    <Pressable
-      style={styles.dropdownField}
-      onPress={onToggle}
-      accessibilityRole="combobox"
-      accessibilityState={{ expanded: isOpen }}>
-      <Text style={styles.inputText}>{value}</Text>
-      <Text style={styles.chevron}>{isOpen ? '⌃' : '⌄'}</Text>
-    </Pressable>
-    {isOpen && (
-      <View style={styles.inlineOptions} onTouchStart={(event) => event.stopPropagation()}>
-        {options.map((option) => (
-          <Pressable
-            key={option}
-            style={[styles.option, option === value && styles.selectedOption]}
-            onPress={() => onSelect(option)}>
-            <Text style={styles.optionText}>{option}</Text>
-          </Pressable>
-        ))}
-      </View>
-    )}
-  </View>
+    <TextInput
+      style={[styles.input, multiline && styles.storyInput]}
+      value={value}
+      placeholder={placeholder}
+      placeholderTextColor={colors.placeholder}
+      onChangeText={onChangeText}
+      selectionColor={colors.primary}
+      multiline={multiline}
+      textAlignVertical={multiline ? 'top' : 'center'}
+    />
   );
 };
 
@@ -106,34 +43,51 @@ const HeroCard: React.FC<{ childName: string }> = ({ childName }) => {
   const styles = useThemedStyles(makeStyles);
   const { gradients } = useAppTheme();
   return (
-  <LinearGradient colors={[...gradients.createHero]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.heroCard}>
-    <Text style={styles.heroTitle}>{`A story made just for\n${childName}.`}</Text>
-    <Text style={styles.heroDescription}>
-      Choose a few details and Suno creates a{`\n`}personalized story in your chosen family{`\n`}voice.
-    </Text>
-  </LinearGradient>
+    <LinearGradient
+      colors={[...gradients.createHero]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.heroCard}>
+      <Text style={styles.heroTitle}>{`A story made just for\n${childName}.`}</Text>
+      <Text style={styles.heroDescription}>
+        Choose a few details and Suno creates a{`\n`}personalized story in your chosen family
+        {`\n`}voice.
+      </Text>
+    </LinearGradient>
   );
 };
 
-const LanguageSelector: React.FC<{ selected: StoryLanguage; onChange: (language: StoryLanguage) => void }> = ({ selected, onChange }) => {
+const LanguageSelector: React.FC<{
+  selected: StoryLanguage;
+  onChange: (language: StoryLanguage) => void;
+}> = ({ selected, onChange }) => {
   const styles = useThemedStyles(makeStyles);
   return (
-  <View style={styles.languageRow}>
-    {[
-      { label: 'हिंदी', value: 'Hindi' as const },
-      { label: 'English', value: 'English' as const },
-      { label: 'Hinglish', value: 'Hinglish' as const },
-    ].map((language) => (
-      <Pressable
-        key={language.value}
-        style={[styles.languagePill, selected === language.value && styles.selectedLanguage]}
-        onPress={() => onChange(language.value)}>
-        <Text style={[styles.languageText, selected === language.value && styles.selectedLanguageText]}>{language.label}</Text>
-      </Pressable>
-    ))}
-  </View>
+    <View style={styles.languageRow}>
+      {(
+        [
+          { label: 'हिंदी', value: 'Hindi' as const },
+          { label: 'English', value: 'English' as const },
+          { label: 'Hinglish', value: 'Hinglish' as const },
+        ] as const
+      ).map((language) => (
+        <Pressable
+          key={language.value}
+          style={[styles.languagePill, selected === language.value && styles.selectedLanguage]}
+          onPress={() => onChange(language.value)}>
+          <Text
+            style={[
+              styles.languageText,
+              selected === language.value && styles.selectedLanguageText,
+            ]}>
+            {language.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
   );
 };
+
 export const CreateStoryScreen: React.FC = () => {
   const { child, voices, createNewStory, setCurrentScreen } = useApp();
   const styles = useThemedStyles(makeStyles);
@@ -144,19 +98,41 @@ export const CreateStoryScreen: React.FC = () => {
   const [topic, setTopic] = useState('');
   const [storyType, setStoryType] = useState('Bedtime adventure');
   const [narratorId, setNarratorId] = useState('');
-  const [openDropdown, setOpenDropdown] = useState<'age' | 'storyType' | 'narrator' | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<DropdownKey | null>(null);
 
   const ageOptions = ['2 years', '3 years', '4 years', '5 years', '6 years'];
-  const storyTypeOptions = ['Bedtime adventure', 'Funny adventure', 'Magical adventure', 'Learning story', 'Animal adventure'];
+  const storyTypeOptions = [
+    'Bedtime adventure',
+    'Funny adventure',
+    'Magical adventure',
+    'Learning story',
+    'Animal adventure',
+  ];
   const selectedNarrator = voices.find((voice) => voice.id === narratorId);
+  const narratorOptions = [
+    'System Voice',
+    ...voices
+      .filter((voice) => Boolean(voice.audioUri))
+      .map((voice) => `${voice.avatar} ${voice.name}`),
+  ];
 
-  const toggleDropdown = (dropdown: 'age' | 'storyType' | 'narrator') => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+  const getWordCount = (text: string) =>
+    text.trim() ? text.trim().split(/\s+/).length : 0;
+
+  const handleTitleChange = (text: string) => {
+    const words = text.trim().split(/\s+/);
+    if (words.length > 20 && text.endsWith(' ')) {
+      showToast('Story title cannot exceed 20 words');
+      return;
+    }
+    setTitle(text);
+  };
+
+  const toggleDropdown = (dropdown: DropdownKey) => {
     setOpenDropdown((current) => (current === dropdown ? null : dropdown));
   };
 
   const selectDropdown = (setter: (value: string) => void, value: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setter(value);
     setOpenDropdown(null);
   };
@@ -165,6 +141,10 @@ export const CreateStoryScreen: React.FC = () => {
     const storyTitle = title.trim();
     if (!storyTitle) {
       showToast('Add a story title');
+      return;
+    }
+    if (getWordCount(storyTitle) > 20) {
+      showToast('Story title cannot exceed 20 words');
       return;
     }
 
@@ -181,15 +161,22 @@ export const CreateStoryScreen: React.FC = () => {
       language,
       category: mapStoryTypeToCategory(storyType),
       narratorId,
-    }).catch((error: unknown) => {
-      showToast(error instanceof Error ? error.message : 'Could not save story');
-    });
+    })
+      .then(() => {
+        showToast('Story created');
+      })
+      .catch((error: unknown) => {
+        showToast(error instanceof Error ? error.message : 'Could not save story');
+      });
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Pressable style={styles.backButton} onPress={() => setCurrentScreen('Home')} accessibilityLabel="Go back">
+        <Pressable
+          style={styles.backButton}
+          onPress={() => setCurrentScreen('Home')}
+          accessibilityLabel="Go back">
           <Text style={styles.backArrow}>‹</Text>
         </Pressable>
         <Text style={styles.headerTitle}> Create a Story</Text>
@@ -229,7 +216,7 @@ export const CreateStoryScreen: React.FC = () => {
             <CustomTextInput
               value={title}
               placeholder="e.g. Aarav and the Moon"
-              onChangeText={setTitle}
+              onChangeText={handleTitleChange}
             />
           </View>
 
@@ -257,13 +244,12 @@ export const CreateStoryScreen: React.FC = () => {
           <View style={styles.lastField}>
             <CustomDropdown
               label="Narrator"
-              value={selectedNarrator ? `${selectedNarrator.avatar} ${selectedNarrator.name}` : 'System Voice'}
-              options={[
-                'System Voice',
-                ...voices
-                  .filter((voice) => Boolean(voice.audioUri))
-                  .map((voice) => `${voice.avatar} ${voice.name}`),
-              ]}
+              value={
+                selectedNarrator
+                  ? `${selectedNarrator.avatar} ${selectedNarrator.name}`
+                  : 'System Voice'
+              }
+              options={narratorOptions}
               isOpen={openDropdown === 'narrator'}
               onToggle={() => toggleDropdown('narrator')}
               onSelect={(value) => {
@@ -292,10 +278,7 @@ export const CreateStoryScreen: React.FC = () => {
 export default CreateStoryScreen;
 
 const makeStyles = (colors: ThemeColors) => ({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
   header: {
     height: 58,
     flexDirection: 'row' as const,
@@ -315,16 +298,9 @@ const makeStyles = (colors: ThemeColors) => ({
     fontWeight: '300' as const,
     lineHeight: 36,
   },
-  headerTitle: {
-    color: colors.textDark,
-    ...theme.typography.cardTitle,
-  },
+  headerTitle: { color: colors.textDark, ...theme.typography.cardTitle },
   headerSpacer: { width: 36 },
-  content: {
-    paddingHorizontal: 16,
-    paddingTop: 28,
-    paddingBottom: 32,
-  },
+  content: { paddingHorizontal: 16, paddingTop: 28, paddingBottom: 32 },
   heroCard: {
     height: 194,
     borderRadius: 28,
@@ -332,15 +308,8 @@ const makeStyles = (colors: ThemeColors) => ({
     paddingVertical: 24,
     marginBottom: 19,
   },
-  heroTitle: {
-    color: colors.textDark,
-    ...theme.typography.hero,
-    marginBottom: 12,
-  },
-  heroDescription: {
-    ...theme.typography.body,
-    color: colors.textMuted,
-  },
+  heroTitle: { color: colors.textDark, ...theme.typography.hero, marginBottom: 12 },
+  heroDescription: { ...theme.typography.body, color: colors.textMuted },
   formCard: {
     backgroundColor: colors.cardBg,
     borderColor: colors.borderLight,
@@ -350,15 +319,8 @@ const makeStyles = (colors: ThemeColors) => ({
   },
   field: { marginBottom: 18 },
   lastField: { marginBottom: 1 },
-  label: {
-    ...theme.typography.section,
-    color: colors.textDark,
-    marginBottom: 8,
-  },
-  storyInput: {
-    minHeight: 120,
-    paddingTop: 12,
-  },
+  label: { ...theme.typography.section, color: colors.textDark, marginBottom: 8 },
+  storyInput: { minHeight: 120, paddingTop: 12 },
   input: {
     minHeight: 51,
     borderColor: colors.borderLight,
@@ -369,28 +331,6 @@ const makeStyles = (colors: ThemeColors) => ({
     paddingHorizontal: 14,
     paddingVertical: 13,
     ...theme.typography.body,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-  },
-  inputText: { ...theme.typography.body, color: colors.textDark },
-  dropdownField: {
-    minHeight: 52,
-    borderColor: colors.borderLight,
-    borderRadius: 12,
-    borderWidth: 1,
-    backgroundColor: colors.cardBg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 13,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-  },
-  chevron: {
-    color: colors.textMuted,
-    fontSize: 22,
-    lineHeight: 18,
-    marginTop: -5,
   },
   languageRow: {
     flexDirection: 'row' as const,
@@ -407,34 +347,9 @@ const makeStyles = (colors: ThemeColors) => ({
     justifyContent: 'center' as const,
     backgroundColor: colors.cardBg,
   },
-  selectedLanguage: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
+  selectedLanguage: { backgroundColor: colors.primary, borderColor: colors.primary },
   selectedLanguageText: { color: colors.onPrimary },
-  languageText: {
-    ...theme.typography.badge,
-    color: colors.textDark,
-  },
-  inlineOptions: {
-    backgroundColor: colors.cardBg,
-    borderColor: colors.borderLight,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginTop: 6,
-    overflow: 'hidden' as const,
-  },
-  option: {
-    minHeight: 48,
-    justifyContent: 'center' as const,
-    paddingHorizontal: spacing.md,
-    borderRadius: 8,
-  },
-  selectedOption: { backgroundColor: colors.purpleLightBg },
-  optionText: {
-    ...theme.typography.body,
-    color: colors.textDark,
-  },
+  languageText: { ...theme.typography.badge, color: colors.textDark },
   createButton: {
     minHeight: 52,
     marginTop: spacing.md,
@@ -443,8 +358,5 @@ const makeStyles = (colors: ThemeColors) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  createButtonText: {
-    ...theme.typography.section,
-    color: colors.onPrimary,
-  },
+  createButtonText: { ...theme.typography.section, color: colors.onPrimary },
 });

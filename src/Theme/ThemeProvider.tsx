@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, useColorScheme, View } from 'react-native';
+import { Appearance, StyleSheet, useColorScheme, View } from 'react-native';
 import { ColorScheme, palettes, ThemeColors } from './Index';
 
 export type AppearanceMode = 'light' | 'dark' | 'system';
@@ -13,7 +13,7 @@ const MODE_ORDER: AppearanceMode[] = ['system', 'light', 'dark'];
 export const appearanceLabel = (mode: AppearanceMode) =>
   ({ system: 'Match device', light: 'Light', dark: 'Dark' })[mode];
 
-type Gradients = (typeof palettes)['light']['gradients'];
+type Gradients = (typeof palettes)[ColorScheme]['gradients'];
 
 type ThemeContextValue = {
   mode: AppearanceMode;
@@ -90,7 +90,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   );
 
   if (!ready) {
-    return <View style={{ flex: 1 }} />;
+    const bootScheme = Appearance.getColorScheme() === 'dark' ? 'dark' : 'light';
+    return (
+      <View
+        style={{ flex: 1, backgroundColor: palettes[bootScheme].colors.background }}
+      />
+    );
   }
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
