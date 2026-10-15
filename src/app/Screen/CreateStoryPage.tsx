@@ -89,7 +89,7 @@ const LanguageSelector: React.FC<{
 };
 
 export const CreateStoryScreen: React.FC = () => {
-  const { child, voices, createNewStory, setCurrentScreen } = useApp();
+  const { child, voices, defaultNarratorId, createNewStory, setCurrentScreen } = useApp();
   const styles = useThemedStyles(makeStyles);
   const [childName, setChildName] = useState(child.name || 'Aarav');
   const [age, setAge] = useState('3 years');
@@ -97,7 +97,7 @@ export const CreateStoryScreen: React.FC = () => {
   const [title, setTitle] = useState('');
   const [topic, setTopic] = useState('');
   const [storyType, setStoryType] = useState('Bedtime adventure');
-  const [narratorId, setNarratorId] = useState('');
+  const [narratorId, setNarratorId] = useState(defaultNarratorId);
   const [openDropdown, setOpenDropdown] = useState<DropdownKey | null>(null);
 
   const ageOptions = ['2 years', '3 years', '4 years', '5 years', '6 years'];

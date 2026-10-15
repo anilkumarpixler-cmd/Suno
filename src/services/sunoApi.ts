@@ -7,6 +7,8 @@ type VoiceDto = {
   name: string;
   languages?: string[];
   status?: Voice['status'];
+  state?: Voice['state'];
+  state_error?: string | null;
   isDefault?: boolean;
   is_default?: boolean;
   avatar?: string;
@@ -25,6 +27,8 @@ const toVoice = (item: VoiceDto): Voice => ({
   name: item.name,
   languages: item.languages || ['English'],
   status: item.status || 'Ready',
+  state: item.state,
+  stateError: item.state_error || undefined,
   isDefault: item.isDefault ?? item.is_default ?? false,
   avatar: item.avatar || '👤',
   audioUri: item.audioUri || item.audio_url,
@@ -102,27 +106,112 @@ export const deleteVoiceOnServer = async (voiceId: string): Promise<void> => {
   if (!response.ok) throw new Error(await readError(response));
 };
 
-export const convertStory = async (
+/** Clones the narrator again from its saved recording (after a failed enroll), in the background. */
+export const reenrollVoice = async (voiceId: string): Promise<Voice> => {
+  const response = await apiFetch(`/v1/voices/${voiceId}/enroll`, { method: 'POST' });
+  if (!response.ok) throw new Error(await readError(response));
+  return toVoice((await response.json()) as VoiceDto);
+};
+
+export type StoryItem = {
+  text: string;
+  language: string;
+  voiceId: string;
+};
+
+export type StoryRead =
+  | ({ ready: true } & TtsResult)
+  | {
+      ready: false;
+      id: string;
+      /** One continuous live WAV (16-bit PCM); sound starts after the first sentence. */
+      streamUrl: string;
+      /** The saved file, available once the story has been read in full. */
+      audioUrl: string;
+      estimatedDuration: number;
+    };
+
+export type StoryStatus =
+  | { done: false }
+  | { done: true; error: string }
+  | ({ done: true; error: null } & TtsResult);
+
+/**
+ * Story in an enrolled narrator's voice: the cached file when it exists (instant),
+ * otherwise a live stream. The narrator's recording is never sent again.
+ */
+export const readStory = async (
   text: string,
   language: string,
   voiceId: string,
-): Promise<TtsResult> => {
-  const response = await apiFetch('/v1/convert', {
+): Promise<StoryRead> => {
+  const response = await apiFetch('/v1/story/read', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      text,
-      language,
-      voice_id: voiceId,
-    }),
+    body: JSON.stringify({ text, language, voice_id: voiceId }),
   });
   if (!response.ok) throw new Error(await readError(response));
   const data = await response.json();
+  const id = String(data.id || '');
   const audioUrl = typeof data.audio_url === 'string' ? data.audio_url : '';
-  if (!audioUrl) throw new Error('Clone did not return audio.');
+  if (!audioUrl) throw new Error('Story did not return audio.');
+  if (data.ready) return { ready: true, id, audioUrl, duration: Number(data.duration) || 1 };
+  const streamUrl = typeof data.stream_url === 'string' ? data.stream_url : '';
+  if (!streamUrl) throw new Error('Story did not return a stream.');
   return {
-    id: String(data.id || ''),
+    ready: false,
+    id,
+    streamUrl,
     audioUrl,
+    estimatedDuration: Number(data.estimated_duration) || 1,
+  };
+};
+
+export const fetchStoryStatus = async (id: string): Promise<StoryStatus> => {
+  const response = await apiFetch(`/v1/story/${id}/status`);
+  if (!response.ok) throw new Error(await readError(response));
+  const data = await response.json();
+  if (!data.done) return { done: false };
+  if (data.error) return { done: true, error: String(data.error) };
+  return {
+    done: true,
+    error: null,
+    id,
+    audioUrl: String(data.audio_url || ''),
     duration: Number(data.duration) || 1,
   };
+};
+
+/** One story start as the app saw it, in ms since the tap: the server logs the whole chain. */
+export type StoryTiming = {
+  readResponseMs: number;
+  playerStartMs: number;
+  firstSoundMs: number;
+  cached: boolean;
+};
+
+/** Best effort, never throws: feeds the server's `[timing] SUMMARY` log line. */
+export const reportStoryTiming = (id: string, timing: StoryTiming) => {
+  void fetch(`${API_BASE_URL}/v1/story/${id}/timing`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      read_response_ms: timing.readResponseMs,
+      player_start_ms: timing.playerStartMs,
+      first_sound_ms: timing.firstSoundMs,
+      cached: timing.cached,
+    }),
+  }).catch(() => undefined);
+};
+
+/** Background pre-reading so a later narrator pick plays at once. Best effort, never throws. */
+export const prepareStories = (items: StoryItem[]) => {
+  if (items.length === 0) return;
+  void fetch(`${API_BASE_URL}/v1/story/prepare`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      items: items.map((item) => ({ text: item.text, language: item.language, voice_id: item.voiceId })),
+    }),
+  }).catch(() => undefined);
 };

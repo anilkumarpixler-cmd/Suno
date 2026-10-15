@@ -17,7 +17,16 @@ interface VoiceCardProps {
   onSetDefault: (voiceId: string) => void;
   onPreviewVoice: (voice: Voice) => void;
   onDeleteVoice: (voiceId: string) => void;
+  onRetryVoice: (voiceId: string) => void;
 }
+
+/** Ready only once the voice is cloned and loaded on the GPU, not when the recording is saved. */
+const voiceStateLabel = (voice: Voice) => {
+  if (!voice.state) return voice.status;
+  if (voice.state === 'ready') return '🟢 Voice ready';
+  if (voice.state === 'error') return '🔴 Voice failed';
+  return '🟡 Preparing voice…';
+};
 
 const VoiceCard: React.FC<VoiceCardProps> = ({
   voice,
@@ -25,8 +34,10 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
   onSetDefault,
   onPreviewVoice,
   onDeleteVoice,
+  onRetryVoice,
 }) => {
   const styles = useThemedStyles(makeStyles);
+  const failed = voice.state === 'error';
   return (
   <View style={styles.voiceCard}>
     <View style={styles.voiceTopRow}>
@@ -36,8 +47,14 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
       <View style={styles.voiceDetails}>
         <Text style={styles.voiceName}>{voice.name}</Text>
         <Text style={styles.metaText}>
-          {voice.languages.join(' · ')} · {isSelected ? 'Default' : voice.status}
+          {voice.languages.join(' · ')} · {isSelected ? 'Default · ' : ''}
+          {voiceStateLabel(voice)}
         </Text>
+        {failed && voice.stateError ? (
+          <Text style={styles.metaText} numberOfLines={2}>
+            {voice.stateError}
+          </Text>
+        ) : null}
       </View>
       {isSelected && (
         <View style={styles.defaultStatus} accessibilityLabel={`${voice.name} selected`}>
@@ -55,13 +72,23 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
         <Text style={styles.playIcon}>▶</Text>
         <Text style={styles.actionText}>Preview</Text>
       </Pressable>
-      <Pressable
-        style={styles.actionButton}
-        onPress={() => onSetDefault(voice.id)}
-        accessibilityRole="button"
-        accessibilityLabel={`Set ${voice.name} as default`}>
-        <Text style={styles.actionText}>Default</Text>
-      </Pressable>
+      {failed ? (
+        <Pressable
+          style={styles.actionButton}
+          onPress={() => onRetryVoice(voice.id)}
+          accessibilityRole="button"
+          accessibilityLabel={`Prepare ${voice.name}'s voice again`}>
+          <Text style={styles.actionText}>Retry</Text>
+        </Pressable>
+      ) : (
+        <Pressable
+          style={styles.actionButton}
+          onPress={() => onSetDefault(voice.id)}
+          accessibilityRole="button"
+          accessibilityLabel={`Set ${voice.name} as default`}>
+          <Text style={styles.actionText}>Default</Text>
+        </Pressable>
+      )}
       <Pressable
         style={styles.actionButton}
         onPress={() => onDeleteVoice(voice.id)}
@@ -77,21 +104,19 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
 export const FamilyVoicesScreen: React.FC = () => {
   const {
     voices,
-    stories,
-    activeStory,
+    defaultNarratorId,
     setDefaultVoice,
     setCurrentScreen,
     deleteVoice,
+    retryVoice,
     narratorPickerStoryId,
-    changeNarrator,
+    selectNarrator,
   } = useApp();
   const { gradients } = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const isPicker = Boolean(narratorPickerStoryId);
-  const selectedVoiceId = isPicker
-    ? stories.find((story) => story.id === narratorPickerStoryId)?.narratorId ||
-      (activeStory?.id === narratorPickerStoryId ? activeStory.narratorId : undefined)
-    : voices.find((voice) => voice.isDefault)?.id;
+  // One global narrator plays every story, in the picker and on the Voices tab alike.
+  const selectedVoiceId = defaultNarratorId || undefined;
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const player = useAudioPlayer(previewUri ?? undefined);
@@ -110,16 +135,15 @@ export const FamilyVoicesScreen: React.FC = () => {
     const voice = voices.find((item) => item.id === voiceId);
     if (!voice) return;
 
-    if (!voice.isDefault) setDefaultVoice(voiceId);
-
-    if (narratorPickerStoryId) {
-      changeNarrator(narratorPickerStoryId, voiceId);
+    if (isPicker) {
+      selectNarrator(voiceId);
       showToast(`${voice.name} is now narrating`);
       setCurrentScreen('NowPlaying');
       return;
     }
 
-    if (voice.isDefault) return;
+    if (voiceId === defaultNarratorId) return;
+    setDefaultVoice(voiceId);
     showToast(`${voice.name} is now your default narrator`);
   };
 
@@ -144,6 +168,14 @@ export const FamilyVoicesScreen: React.FC = () => {
 
   const handleDeleteVoice = (voiceId: string) => {
     setPendingDeleteId(voiceId);
+  };
+
+  const handleRetryVoice = (voiceId: string) => {
+    retryVoice(voiceId)
+      .then(() => showToast('Preparing voice again…'))
+      .catch((error: unknown) =>
+        showToast(error instanceof Error ? error.message : 'Could not prepare the voice'),
+      );
   };
 
   const handleCancelDelete = () => {
@@ -217,8 +249,7 @@ export const FamilyVoicesScreen: React.FC = () => {
           <Pressable
             style={styles.voiceCard}
             onPress={() => {
-              if (!narratorPickerStoryId) return;
-              changeNarrator(narratorPickerStoryId, '');
+              selectNarrator('');
               showToast('Using system voice');
               setCurrentScreen('NowPlaying');
             }}
@@ -249,6 +280,7 @@ export const FamilyVoicesScreen: React.FC = () => {
             onSetDefault={handleSetDefault}
             onPreviewVoice={handlePreviewVoice}
             onDeleteVoice={handleDeleteVoice}
+            onRetryVoice={handleRetryVoice}
           />
         ))}
 

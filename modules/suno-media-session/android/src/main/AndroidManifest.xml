@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!-- Control/state layer for System Voice (TTS) playback. It plays no audio itself. -->
+    <service
+      android:name=".SunoMediaSessionService"
+      android:exported="false"
+      android:foregroundServiceType="mediaPlayback" />
+  </application>
+</manifest>

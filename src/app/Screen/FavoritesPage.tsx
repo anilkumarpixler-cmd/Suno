@@ -9,7 +9,7 @@ import { spacing, theme, ThemeColors } from '@/Theme/Index';
 import { useThemedStyles } from '@/Theme/ThemeProvider';
 
 export const FavoritesScreen: React.FC = () => {
-  const { stories, voices, playStory, setCurrentScreen, toggleFavorite } = useApp();
+  const { stories, defaultNarrator, playStory, setCurrentScreen, toggleFavorite } = useApp();
   const styles = useThemedStyles(makeStyles);
   const favorites = stories.filter((story) => story.isFavorite);
 
@@ -32,7 +32,7 @@ export const FavoritesScreen: React.FC = () => {
         renderItem={({ item: story }) => (
           <StoryCard
             story={story}
-            narrator={voices.find((v) => v.id === story.narratorId)}
+            narrator={defaultNarrator}
             onPress={() => playStory(story, true)}
             onRemove={() => {
               toggleFavorite(story.id);

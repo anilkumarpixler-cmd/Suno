@@ -10,7 +10,8 @@ import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export const HomeScreen: React.FC = () => {
-  const { child, stories, voices, playStory, setCurrentScreen, lastPlayedStoryId } = useApp();
+  const { child, stories, defaultNarrator, playStory, setCurrentScreen, lastPlayedStoryId } =
+    useApp();
   const { gradients } = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const [selectedCategory, setSelectedCategory] = useState<Category>('All');
@@ -95,7 +96,7 @@ export const HomeScreen: React.FC = () => {
                 <StoryCard
                   story={continueStory}
                   variant="continue"
-                  narrator={voices.find((v) => v.id === continueStory.narratorId)}
+                  narrator={defaultNarrator}
                   onPress={() => playStory(continueStory, true)}
                 />
               </View>
@@ -107,7 +108,7 @@ export const HomeScreen: React.FC = () => {
         renderItem={({ item: story }) => (
           <StoryCard
             story={story}
-            narrator={voices.find((v) => v.id === story.narratorId)}
+            narrator={defaultNarrator}
             onPress={() => playStory(story, true)}
           />
         )}
@@ -160,17 +161,19 @@ const makeStyles = (colors: ThemeColors) => ({
     fontWeight: '700' as const,
   },
   subSectionTitle: { ...theme.typography.hero, fontSize: 24, lineHeight: 30, color: colors.textDark, marginBottom: spacing.sm },
-  popularTitle: { marginTop: spacing.xs },
-  pillsScroll: { marginBottom: spacing.md, height: 30 },
+  popularTitle: { marginTop: spacing.xs, },
+  // Sized by its pills (no fixed height that would crop them).
+  pillsScroll: { marginBottom: spacing.md, flexGrow: 0 },
   pill: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 9,
     borderRadius: borderRadius.pill,
     backgroundColor: colors.pillBg,
     marginRight: 8,
   },
   activePill: { backgroundColor: colors.primary },
-  pillText: { ...theme.typography.badge, color: colors.textDark, fontSize: 16 },
-  activePillText: { ...theme.typography.badge, color: colors.onPrimary, fontSize: 18 },
+  // Same size selected or not, so the row doesn't shift when a category is picked.
+  pillText: { ...theme.typography.badge, color: colors.textDark, fontSize: 17, lineHeight: 22 },
+  activePillText: { color: colors.onPrimary },
   section: { marginTop: spacing.xs },
 });

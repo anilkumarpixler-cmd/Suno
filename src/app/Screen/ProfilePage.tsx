@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Common/header';
 import { showToast } from '@/components/Common/Toast';
 import { useApp } from '@/Context/AppContext';
+import { formatDays, formatTime, SleepModeSettings } from '@/services/sleepMode';
 import { theme, ThemeColors } from '@/Theme/Index';
 import { appearanceLabel, useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 import { RootScreen } from '@/Types';
@@ -96,13 +97,18 @@ const settings: Array<{
   destination?: RootScreen;
 }> = [
   { id: 'language', title: 'Language', subtitle: 'Hindi + English', icon: 'globe' },
-  { id: 'sleepTimer', title: 'Sleep timer', subtitle: 'Off', icon: 'moon' },
+  { id: 'sleepTimer', title: 'Sleep timer', subtitle: 'Off', icon: 'moon', destination: 'SleepTimer' },
   { id: 'familyVoices', title: 'Family voices', subtitle: '3 voices', icon: 'microphone', destination: 'Voices' },
   { id: 'privacy', title: 'Privacy & voice data', subtitle: 'Manage recordings', icon: 'lock' },
 ];
 
+const sleepModeLabel = (settings: SleepModeSettings) =>
+  settings.enabled
+    ? `${formatTime(settings.startMinutes)} – ${formatTime(settings.endMinutes)} · ${formatDays(settings.days)}`
+    : 'Off';
+
 export const ProfileScreen: React.FC = () => {
-  const { child, setCurrentScreen } = useApp();
+  const { child, setCurrentScreen, sleepMode } = useApp();
   const { mode, scheme, cycleMode } = useAppTheme();
   const styles = useThemedStyles(makeStyles);
 
@@ -129,7 +135,7 @@ export const ProfileScreen: React.FC = () => {
           <SettingsCard
             key={setting.id}
             title={setting.title}
-            subtitle={setting.subtitle}
+            subtitle={setting.id === 'sleepTimer' ? sleepModeLabel(sleepMode) : setting.subtitle}
             icon={setting.icon}
             onPress={() => {
               if (setting.destination) {

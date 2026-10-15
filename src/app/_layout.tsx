@@ -49,6 +49,7 @@ function AppNavigator() {
         <Stack.Screen name="Screen/NowPlay" />
         <Stack.Screen name="Screen/AddVoicePage" />
         <Stack.Screen name="Screen/FavoritesPage" />
+        <Stack.Screen name="Screen/SleepTimerPage" />
       </Stack>
       {pathname !== '/Screen/NowPlay' && <MiniPlayerBar />}
       {showBottomNavigation && (

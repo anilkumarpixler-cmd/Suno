@@ -84,13 +84,50 @@ type SpeakOptions = {
   pitch: number;
   rate?: number;
   onDone?: () => void;
+  /** Word about to be spoken (`charIndex` into `text`). Android API 26+, engine-dependent. */
+  onBoundary?: (event: { charIndex: number; charLength: number }) => void;
 };
 
-export const speakText = (text: string, { locale, pitch, rate = 1, onDone }: SpeakOptions) => {
-  Speech.speak(text, {
-    language: locale,
-    pitch,
-    rate,
-    onDone,
+const SENTENCE_BREAKS = ['. ', '। ', '! ', '? '];
+
+/** `text` in exact consecutive slices the engine accepts (Android: 4000 chars per utterance),
+ * cut after a sentence end when possible, else at a space. */
+const speechParts = (text: string): string[] => {
+  const limit = Speech.maxSpeechInputLength;
+  const parts: string[] = [];
+  let rest = text;
+  while (rest.length > limit) {
+    const head = rest.slice(0, limit);
+    const sentence = Math.max(...SENTENCE_BREAKS.map(mark => head.lastIndexOf(mark)));
+    let cut = sentence > 0 ? sentence + 1 : head.lastIndexOf(' ');
+    if (cut <= 0) cut = limit;
+    parts.push(rest.slice(0, cut));
+    rest = rest.slice(cut);
+  }
+  parts.push(rest);
+  return parts;
+};
+
+/** Speaks `text` as queued utterances (a long story is over the engine's input limit); they play
+ * back to back. `onBoundary` indices are into the whole `text`; `onDone` fires after the last part. */
+export const speakText = (
+  text: string,
+  { locale, pitch, rate = 1, onDone, onBoundary }: SpeakOptions,
+) => {
+  const parts = speechParts(text);
+  let offset = 0;
+  parts.forEach((part, index) => {
+    const start = offset;
+    offset += part.length;
+    Speech.speak(part, {
+      language: locale,
+      pitch,
+      rate,
+      onDone: index === parts.length - 1 ? onDone : undefined,
+      onBoundary: onBoundary
+        ? (event: { charIndex: number; charLength: number }) =>
+            onBoundary({ ...event, charIndex: start + event.charIndex })
+        : undefined,
+    });
   });
 };

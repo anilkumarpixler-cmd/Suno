@@ -1,10 +1,17 @@
+import { isRunningInExpoGo } from 'expo';
 import { Asset } from 'expo-asset';
 import type { AudioMetadata, AudioPlayer } from 'expo-audio';
 import { useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 import { Story } from '../Types';
 
 const ALBUM_TITLE = 'Suno Stories';
-const DEFAULT_ARTWORK = require('@/assets/images/suno icon sm.png');
+const DEFAULT_ARTWORK = require('../../assets/images/new icon.png');
+// Expo Go has no expo-audio playback service; binding fails and logs errors on every story.
+// A dev build made before `enableBackgroundPlayback` was added fails the same way: rebuild it.
+// Android uses `useDeviceMediaSession` instead: expo-audio's service calls startForeground() again
+// on every play event, which Android 12+ rejects while the app is in the background.
+const LOCK_SCREEN_SUPPORTED = Platform.OS === 'ios' && !isRunningInExpoGo();
 
 type UseLockScreenControlsArgs = {
   /** True while the native player should own the lock screen / notification media card. */
@@ -35,7 +42,7 @@ const useDefaultArtworkUri = () => {
 };
 
 /**
- * Shows the native media card (lock screen + notification tray) for the story player.
+ * Shows the iOS lock screen media card for narrator (server) playback.
  *
  * The card is registered once per playback session. Story changes (auto-next / previous),
  * narrator changes and late-resolved artwork go through `updateLockScreenMetadata`, so the
@@ -61,8 +68,9 @@ export const useLockScreenControls = (
   }, [title, artist, artworkUrl]);
 
   // Register while active; clear when playback stops / goes idle, or on unmount.
+  // Android, and System Voice (device TTS) playback, use `useDeviceMediaSession` instead.
   useEffect(() => {
-    if (!active) return;
+    if (!active || !LOCK_SCREEN_SUPPORTED) return;
     try {
       player.setActiveForLockScreen(true, metadataRef.current, {
         showSeekBackward: true,
@@ -85,7 +93,7 @@ export const useLockScreenControls = (
 
   // Update the card in place when the story, narrator or artwork changes.
   useEffect(() => {
-    if (!active || !isRegisteredRef.current || !metadataRef.current) return;
+    if (!active || !LOCK_SCREEN_SUPPORTED || !isRegisteredRef.current || !metadataRef.current) return;
     try {
       player.updateLockScreenMetadata(metadataRef.current);
     } catch {

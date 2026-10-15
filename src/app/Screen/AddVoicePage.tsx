@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -11,11 +11,14 @@ import {
 import {
   RecordingPresets,
   requestRecordingPermissionsAsync,
+  setAudioModeAsync,
   useAudioPlayer,
   useAudioRecorder,
   useAudioRecorderState,
 } from 'expo-audio';
+import { abandonRecordingFocus, requestRecordingFocus } from '../../../modules/suno-media-session';
 import { useApp } from '@/Context/AppContext';
+import { STORY_AUDIO_MODE } from '@/hooks/useStoryPlayer';
 import { Header } from '@/components/Common/header';
 import { borderRadius, spacing, theme, ThemeColors } from '@/Theme/Index';
 import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
@@ -23,6 +26,26 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { deleteVoiceRecording } from '@/storage/voiceAudio';
 import {showToast} from '@/components/Common/Toast';
 const LANGUAGE_OPTIONS = ['Hindi + English', 'Hindi', 'English', 'Punjabi', 'Gujarati'];
+// Cloning reads the first ~10 s of clear speech: shorter clones badly, longer is never used.
+const MIN_RECORDING_SECONDS = 8;
+const MAX_RECORDING_SECONDS = 30;
+
+/** Other apps' audio (a song in YouTube, Spotify…) pauses so it stays out of the recording:
+ * the audio mode on iOS, a recording audio focus request on Android. */
+const beginRecordingAudio = async () => {
+  await setAudioModeAsync({ ...STORY_AUDIO_MODE, allowsRecording: true });
+  requestRecordingFocus();
+};
+
+/** Gives the audio back and returns to the story playback mode (speaker, background). */
+const endRecordingAudio = () => {
+  abandonRecordingFocus();
+  void setAudioModeAsync(STORY_AUDIO_MODE).catch(() => undefined);
+};
+
+/** Same name for comparing: case, outer and repeated spaces don't make a different voice. */
+const nameKey = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase();
+const SYSTEM_VOICE_KEY = nameKey('System Voice');
 
 const formatTime = (seconds: number) => {
   const minutes = Math.floor(seconds / 60);
@@ -31,16 +54,24 @@ const formatTime = (seconds: number) => {
 };
 
 export const AddVoiceScreen: React.FC = () => {
-  const { addVoice, setCurrentScreen } = useApp();
+  const { voices, addVoice, setCurrentScreen, isPlaying, isPreparingAudio, pausePlayback } = useApp();
   const { colors } = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const [name, setName] = useState('');
+  const key = nameKey(name);
+  const nameTaken =
+    key !== '' && (key === SYSTEM_VOICE_KEY || voices.some((voice) => nameKey(voice.name) === key));
+  const nameError = nameTaken ? 'This name already exists. Please enter a valid voice name.' : '';
+  const nameUsable = key !== '' && !nameTaken;
   const [selectedLang, setSelectedLang] = useState('Hindi + English');
   const [isLangOpen, setIsLangOpen] = useState(false);
   const [timer, setTimer] = useState(0);
   const [isRecorded, setIsRecorded] = useState(false);
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  // Ref, not state: a second tap can arrive before the re-render that disables the button.
+  const savingRef = useRef(false);
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
@@ -58,8 +89,25 @@ export const AddVoiceScreen: React.FC = () => {
   }, [isRecording]);
 
   useEffect(() => {
+    if (isRecording && timer >= MAX_RECORDING_SECONDS) void handleStopRecording();
+  }, [isRecording, timer]);
+
+  useEffect(() => {
     if (recordedUri) player.replace(recordedUri);
   }, [recordedUri]);
+
+  // Leaving the screen mid-recording must not keep other apps paused.
+  useEffect(
+    () => () => {
+      try {
+        if (recorder.isRecording) void recorder.stop().catch(() => undefined);
+      } catch {
+        // Recorder may already be released.
+      }
+      endRecordingAudio();
+    },
+    [],
+  );
 
   const stopPreview = () => {
     try {
@@ -84,6 +132,7 @@ export const AddVoiceScreen: React.FC = () => {
       Alert.alert('Enter name', 'Please enter whose voice you are recording.');
       return;
     }
+    if (nameTaken) return;
 
     try {
       const permission = await requestRecordingPermissionsAsync();
@@ -95,10 +144,15 @@ export const AddVoiceScreen: React.FC = () => {
         return;
       }
 
+      // The story must not play into the microphone; Play resumes it after recording.
+      if (isPlaying || isPreparingAudio) pausePlayback();
       await clearRecording();
+      // Other apps' audio is paused before the mic opens, so the timer starts on a quiet room.
+      await beginRecordingAudio();
       await recorder.prepareToRecordAsync();
       recorder.record();
     } catch {
+      endRecordingAudio();
       Alert.alert('Recording error', 'Could not start recording. Please try again.');
     }
   };
@@ -113,6 +167,8 @@ export const AddVoiceScreen: React.FC = () => {
       }
     } catch {
       Alert.alert('Recording error', 'Could not save the recording.');
+    } finally {
+      endRecordingAudio();
     }
   };
 
@@ -137,15 +193,27 @@ export const AddVoiceScreen: React.FC = () => {
   };
 
   const handleSave = async () => {
+    // One voice per recording: further taps while it uploads are ignored.
+    if (savingRef.current) return;
     if (!name.trim()) {
       Alert.alert('Enter name', 'Please enter a voice name.');
       return;
     }
+    if (nameTaken) return;
     if (!recordedUri) {
       Alert.alert('Record your voice', 'Please record your voice before saving.');
       return;
     }
+    if (timer < MIN_RECORDING_SECONDS) {
+      Alert.alert(
+        'Recording too short',
+        `Please read aloud for at least ${MIN_RECORDING_SECONDS} seconds so the voice can be cloned clearly.`,
+      );
+      return;
+    }
 
+    savingRef.current = true;
+    setIsSaving(true);
     stopPreview();
     try {
       await addVoice(name, selectedLang.split(' + '), recordedUri);
@@ -154,7 +222,8 @@ export const AddVoiceScreen: React.FC = () => {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not save this voice. Please try again.';
       Alert.alert('Save error', message);
-
+      savingRef.current = false;
+      setIsSaving(false);
     }
   };
 
@@ -171,12 +240,18 @@ export const AddVoiceScreen: React.FC = () => {
         <View style={styles.formGroup}>
           <Text style={styles.label}>Whose voice is this?</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, nameError !== '' && styles.inputError]}
             placeholder="e.g. Mummy, Papa, Nani"
             placeholderTextColor={colors.placeholder}
             value={name}
             onChangeText={setName}
+            accessibilityHint={nameError || undefined}
           />
+          {nameError !== '' && (
+            <Text style={styles.errorText} accessibilityLiveRegion="polite">
+              {nameError}
+            </Text>
+          )}
         </View>
 
         <View style={[styles.formGroup, styles.langGroup]}>
@@ -218,15 +293,15 @@ export const AddVoiceScreen: React.FC = () => {
             {isRecording ? 'Recording Voice...' : isRecorded ? 'Voice Recorded' : 'Record your voice'}
           </Text>
           <Text style={styles.recSub}>
-            Read the sample story aloud for 2–5 minutes to clone your voice tone.
+            Read the sample story aloud clearly for 15–20 seconds in a quiet room to clone your voice tone.
           </Text>
 
           {isRecording && <Text style={styles.timerText}>{formatTime(timer)}</Text>}
 
           {!isRecording && !isRecorded && (
             <TouchableOpacity
-              style={[styles.recBtn, !name.trim() && styles.disabledBtn]}
-              disabled={!name.trim()}
+              style={[styles.recBtn, !nameUsable && styles.disabledBtn]}
+              disabled={!nameUsable}
               onPress={handleStartRecording}
             >
               <Text style={styles.recBtnText}>Start recording</Text>
@@ -241,14 +316,22 @@ export const AddVoiceScreen: React.FC = () => {
 
           {isRecorded && (
             <View style={styles.postRecRow}>
-              <TouchableOpacity style={styles.secondaryBtn} onPress={handleRetake}>
+              <TouchableOpacity
+                style={[styles.secondaryBtn, isSaving && styles.disabledBtn]}
+                disabled={isSaving}
+                onPress={handleRetake}
+              >
                 <Text style={styles.secondaryText}>Retake</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.playBtn} onPress={handlePreview}>
                 <Text style={styles.playText}>{isPreviewing ? 'Pause' : '▶ Preview'}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-                <Text style={styles.saveText}>Save Voice</Text>
+              <TouchableOpacity
+                style={[styles.saveBtn, (isSaving || nameTaken) && styles.disabledBtn]}
+                disabled={isSaving || nameTaken}
+                onPress={handleSave}
+              >
+                <Text style={styles.saveText}>{isSaving ? 'Saving…' : 'Save Voice'}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -284,6 +367,8 @@ const makeStyles = (colors: ThemeColors) => ({
     color: colors.textDark,
     ...theme.typography.body,
   },
+  inputError: { borderColor: colors.danger },
+  errorText: { ...theme.typography.caption, color: colors.danger, marginTop: 6 },
   dropdownField: {
     minHeight: 52,
     borderColor: colors.borderLight,

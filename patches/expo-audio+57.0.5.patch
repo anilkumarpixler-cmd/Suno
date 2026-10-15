@@ -1,0 +1,137 @@
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt
+index 992239b..9846c67 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt
+@@ -43,13 +43,16 @@ import kotlinx.coroutines.runBlocking
+ import okhttp3.OkHttpClient
+ import java.io.File
+ import java.util.concurrent.ConcurrentHashMap
++import java.util.concurrent.TimeUnit
+ 
+ @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+ class AudioModule : Module() {
+   private lateinit var audioManager: AudioManager
+   private val context: Context
+     get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
+-  private val httpClient = OkHttpClient()
++  // Suno: a live story's next chunk can take longer than OkHttp's 10 s read timeout; a timeout
++  // makes ExoPlayer reload the unseekable live stream from the start (the story restarts).
++  private val httpClient = OkHttpClient.Builder().readTimeout(120, TimeUnit.SECONDS).build()
+ 
+   private val players = ConcurrentHashMap<String, AudioPlayer>()
+   private val recorders = ConcurrentHashMap<String, AudioRecorder>()
+@@ -133,7 +136,20 @@ class AudioModule : Module() {
+   }
+ 
+   private fun shouldReleaseFocus(): Boolean {
+-    return allPlayables.none { it.isPlaying }
++    // Suno: a player buffering to play (a live story waiting for its next chunk) still holds
++    // focus; released, the other app resumed and both played once the story went on.
++    return allPlayables.none {
++      it.isPlaying || (it.player.playWhenReady && it.player.playbackState == Player.STATE_BUFFERING)
++    }
++  }
++
++  // Suno: playback that resumes by itself (after buffering) takes focus back, so other apps pause.
++  private fun onPlayingChanged(isPlaying: Boolean) {
++    if (isPlaying) {
++      if (!focusAcquired) requestAudioFocus()
++    } else if (shouldReleaseFocus()) {
++      releaseAudioFocus()
++    }
+   }
+ 
+   private fun shouldPlayInSilentMode(): Boolean {
+@@ -145,17 +161,20 @@ class AudioModule : Module() {
+       return
+     }
+ 
++    // Suno: a story is long media playback: full focus (not transient), so other media apps
++    // pause instead of only ducking or carrying on; Android 12+ fades out any that don't.
+     val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+       val requestType = interruptionMode?.let {
+         if (it == InterruptionMode.DO_NOT_MIX) {
+-          AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
++          AudioManager.AUDIOFOCUS_GAIN
+         } else {
+           AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+         }
+-      } ?: AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
++      } ?: AudioManager.AUDIOFOCUS_GAIN
+       audioFocusRequest = AudioFocusRequest.Builder(requestType).run {
+         setAudioAttributes(
+           AudioAttributes.Builder()
++            .setUsage(AudioAttributes.USAGE_MEDIA)
+             .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+             .build()
+         )
+@@ -169,7 +188,7 @@ class AudioModule : Module() {
+     } else {
+       @Suppress("DEPRECATION")
+       val requestType = if (interruptionMode == InterruptionMode.DO_NOT_MIX) {
+-        AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
++        AudioManager.AUDIOFOCUS_GAIN
+       } else {
+         AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+       }
+@@ -362,11 +381,7 @@ class AudioModule : Module() {
+             updateInterval,
+             bufferDurationMs
+           )
+-          player.onPlaybackStateChange = { isPlaying ->
+-            if (!isPlaying && shouldReleaseFocus()) {
+-              releaseAudioFocus()
+-            }
+-          }
++          player.onPlaybackStateChange = { isPlaying -> onPlayingChanged(isPlaying) }
+           players[player.id] = player
+           player
+         }
+@@ -684,11 +699,7 @@ class AudioModule : Module() {
+             }
+           }
+           playlist.loadInitialPlaylist()
+-          playlist.onPlaybackStateChange = { isPlaying ->
+-            if (!isPlaying && shouldReleaseFocus()) {
+-              releaseAudioFocus()
+-            }
+-          }
++          playlist.onPlaybackStateChange = { isPlaying -> onPlayingChanged(isPlaying) }
+           playlists[playlist.id] = playlist
+           playlist
+         }
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
+index c76a9fd..7a8bd6b 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
+@@ -40,18 +40,18 @@ class AudioPlayer(
+     .setSeekForwardIncrementMs(SEEK_JUMP_INTERVAL_MS)
+     .setSeekBackIncrementMs(SEEK_JUMP_INTERVAL_MS)
+     .apply {
+-      if (bufferDurationMs > 0) {
+-        setLoadControl(
+-          DefaultLoadControl.Builder()
+-            .setBufferDurationsMs(
+-              DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
+-              bufferDurationMs.toInt().coerceAtLeast(DefaultLoadControl.DEFAULT_MIN_BUFFER_MS),
+-              DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+-              DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
+-            )
+-            .build()
+-        )
+-      }
++      // Suno: a live story arrives one generated chunk at a time. Play as soon as a little audio
++      // is in (defaults wait for 2.5 s, and 5 s after every stall, even with the next chunk here).
++      setLoadControl(
++        DefaultLoadControl.Builder()
++          .setBufferDurationsMs(
++            DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
++            bufferDurationMs.toInt().coerceAtLeast(DefaultLoadControl.DEFAULT_MIN_BUFFER_MS),
++            500,
++            1000
++          )
++          .build()
++      )
+     }
+     .build(),
+   appContext = appContext,

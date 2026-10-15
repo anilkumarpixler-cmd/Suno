@@ -1,5 +1,5 @@
 import React, { useMemo, useRef } from 'react';
-import { LayoutChangeEvent, PanResponder, Text, TouchableOpacity, View } from 'react-native';
+import { LayoutChangeEvent, PanResponder, Pressable, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useApp } from '../../Context/AppContext';
 import { theme, ThemeColors } from '../../Theme/Index';
@@ -18,7 +18,7 @@ export const MiniPlayerBar: React.FC = () => {
     playPreviousStory,
     togglePlayPause,
     setCurrentScreen,
-    voices,
+    defaultNarrator: narrator,
   } = useApp();
   const { colors } = useAppTheme();
   const styles = useThemedStyles(makeStyles);
@@ -56,7 +56,6 @@ export const MiniPlayerBar: React.FC = () => {
   if (!activeStory) return null;
 
   const progressPct = Math.min(100, Math.max(0, (currentTime / duration) * 100));
-  const narrator = voices.find((voice) => voice.id === activeStory.narratorId);
 
   const onSliderLayout = (event: LayoutChangeEvent) => {
     barWidthRef.current = event.nativeEvent.layout.width;
@@ -64,12 +63,13 @@ export const MiniPlayerBar: React.FC = () => {
 
   return (
     <View style={styles.bar}>
-      <View style={styles.row}>
-        <TouchableOpacity
-          style={styles.info}
-          onPress={() => setCurrentScreen('NowPlaying')}
-          accessibilityRole="button"
-          accessibilityLabel={`Open ${activeStory.title}`}>
+      {/* A tap anywhere on the bar opens Now Playing; its buttons only control playback. */}
+      <Pressable
+        style={styles.row}
+        onPress={() => setCurrentScreen('NowPlaying')}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${activeStory.title}`}>
+        <View style={styles.info}>
           <View style={styles.artBox}>
             <Text style={styles.art}>{activeStory.artwork}</Text>
           </View>
@@ -81,12 +81,12 @@ export const MiniPlayerBar: React.FC = () => {
               {narrator?.name || 'System Voice'}
             </Text>
           </View>
-        </TouchableOpacity>
+        </View>
 
         <View style={styles.controls}>
           <TouchableOpacity
             style={styles.ctrlBtn}
-            onPress={playPreviousStory}
+            onPress={() => playPreviousStory(false)}
             accessibilityLabel="Previous story">
             <MaterialIcons name="skip-previous" size={26} color={colors.playerText} />
           </TouchableOpacity>
@@ -120,12 +120,12 @@ export const MiniPlayerBar: React.FC = () => {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.ctrlBtn}
-            onPress={playNextStory}
+            onPress={() => playNextStory(false)}
             accessibilityLabel="Next story">
             <MaterialIcons name="skip-next" size={26} color={colors.playerText} />
           </TouchableOpacity>
         </View>
-      </View>
+      </Pressable>
 
       <View
         style={styles.sliderHit}

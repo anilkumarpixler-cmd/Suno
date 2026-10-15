@@ -4,7 +4,7 @@
     "slug": "Suno_Stories",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/suno icon sm.png",
+    "icon": "./assets/images/new icon.png",
     "scheme": "sunostories",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -21,16 +21,16 @@
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/suno icon.png",
-        "backgroundImage": "./assets/images/suno icon.png",
-        "monochromeImage": "./assets/images/suno icon.png"
+        "foregroundImage": "./assets/images/new icon.png",
+        "backgroundImage": "./assets/images/new icon.png",
+        "monochromeImage": "./assets/images/new icon.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.arashdeepkaur.Suno_Stories"
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/suno icon sm.png"
+      "favicon": "./assets/images/new icon.png"
     },
     "plugins": [
       "expo-router",
@@ -44,9 +44,10 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "image": "./assets/images/suno icon sm.png",
-          "imageWidth": 76
+          "backgroundColor": "#1b083d",
+          "image": "./assets/images/splash.png",
+          "imageWidth": 76,
+          "imageStyle": "contain"
         }
       ],
       "expo-image",

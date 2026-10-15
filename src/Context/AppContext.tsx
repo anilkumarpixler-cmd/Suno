@@ -3,10 +3,12 @@ import { router, usePathname } from 'expo-router';
 import { Child, CreateStoryInput, RootScreen, Story, Voice } from '../Types';
 import { initialChild, initialStories, initialVoices } from '../Data/mockData';
 import { useStoryPlayer } from '../hooks/useStoryPlayer';
+import { SleepModeSettings } from '../services/sleepMode';
 import { estimateDuration, normalizeStory } from '../services/storySpeech';
 import {
   deleteVoiceOnServer,
   fetchVoices,
+  reenrollVoice,
   setDefaultVoiceOnServer,
   uploadVoice,
 } from '../services/sunoApi';
@@ -26,25 +28,38 @@ type AppContextType = {
   duration: number;
   playbackSpeed: number;
   setPlaybackSpeed: (speed: number) => void;
+  sleepMode: SleepModeSettings;
+  saveSleepMode: (settings: SleepModeSettings) => Promise<void>;
   isRepeat: boolean;
   toggleRepeat: () => void;
   playStory: (story: Story, autoPlay?: boolean) => void;
   togglePlayPause: () => void;
+  /** Pauses the story from any state (also while a cloned voice prepares); Play resumes. */
+  pausePlayback: () => void;
   seekTo: (time: number) => void;
   skipTime: (seconds: number) => void;
-  playNextStory: () => void;
-  playPreviousStory: () => void;
+  /** `openPlayer` (default true): also opens Now Playing. */
+  playNextStory: (openPlayer?: boolean) => void;
+  playPreviousStory: (openPlayer?: boolean) => void;
+  /** Global narrator for every story ('' = System Voice), persisted across restarts. */
+  defaultNarratorId: string;
+  defaultNarrator: Voice | undefined;
   setDefaultVoice: (voiceId: string) => void;
   addVoice: (name: string, languages: string[], audioUri?: string) => Promise<void>;
   deleteVoice: (voiceId: string) => Promise<void>;
+  /** Clones a narrator again from its recording after its enroll failed. */
+  retryVoice: (voiceId: string) => Promise<void>;
   toggleFavorite: (storyId: string) => void;
-  changeNarrator: (storyId: string, voiceId: string) => void;
+  /** Now Playing picker: makes the voice the default and replays the current story in it. */
+  selectNarrator: (voiceId: string) => void;
   narratorPickerStoryId: string | null;
   openNarratorPicker: (storyId: string) => void;
   createNewStory: (input: CreateStoryInput) => Promise<void>;
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
+
+const VOICE_POLL_MS = 2000;
 
 const screenRoutes: Record<RootScreen, string> = {
   Home: '/',
@@ -54,6 +69,7 @@ const screenRoutes: Record<RootScreen, string> = {
   NowPlaying: '/Screen/NowPlay',
   AddVoice: '/Screen/AddVoicePage',
   Favorites: '/Screen/FavoritesPage',
+  SleepTimer: '/Screen/SleepTimerPage',
   GenerationLoader: '/Screen/CreateStoryPage',
 };
 
@@ -100,13 +116,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     duration,
     playStory,
     togglePlayPause,
+    pausePlayback,
     seekTo,
     skipTime,
     playNextStory,
     playPreviousStory,
-    restartSpeech,
+    defaultNarratorId,
+    setDefaultNarrator,
     playbackSpeed,
     setPlaybackSpeed,
+    sleepMode,
+    saveSleepMode,
     isRepeat,
     toggleRepeat,
   } = useStoryPlayer({
@@ -165,6 +185,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
+  // A narrator is being cloned on the server: refresh until it is ready (or failed).
+  const voicesPreparing = voices.some(
+    (voice) => voice.state !== undefined && voice.state !== 'ready' && voice.state !== 'error',
+  );
+  useEffect(() => {
+    if (!voicesPreparing) return;
+    const interval = setInterval(() => {
+      fetchVoices()
+        .then((remote) => {
+          if (remote.length > 0) setVoices(remote);
+        })
+        .catch(() => undefined);
+    }, VOICE_POLL_MS);
+    return () => clearInterval(interval);
+  }, [voicesPreparing]);
+
   useEffect(() => {
     if (activeStory) setLastPlayedStoryId(activeStory.id);
   }, [activeStory?.id]);
@@ -173,20 +209,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!activeStory || isPreparingAudio) return;
     const storyId = activeStory.id;
     const time = currentTime;
-    setStories((prev) =>
-      prev.map((item) => (item.id === storyId && item.progress !== time ? { ...item, progress: time } : item))
-    );
+    // Same list when nothing changed, so React skips the re-render.
+    setStories((prev) => {
+      const index = prev.findIndex((item) => item.id === storyId);
+      if (index < 0 || prev[index].progress === time) return prev;
+      const next = [...prev];
+      next[index] = { ...prev[index], progress: time };
+      return next;
+    });
     const timeout = setTimeout(() => {
       void updateStory(storyId, { progress: time });
     }, 800);
     return () => clearTimeout(timeout);
   }, [currentTime, activeStory?.id, isPreparingAudio]);
 
-  const setDefaultVoice = (voiceId: string) => {
-    void setDefaultVoiceOnServer(voiceId).catch(() => undefined);
+  const defaultNarrator = voices.find((voice) => voice.id === defaultNarratorId);
+
+  const syncDefaultVoice = (voiceId: string) => {
+    if (voiceId) void setDefaultVoiceOnServer(voiceId).catch(() => undefined);
     setVoices((prev) =>
       prev.map((voice) => ({ ...voice, isDefault: voice.id === voiceId }))
     );
+  };
+
+  const setDefaultVoice = (voiceId: string) => {
+    setDefaultNarrator(voiceId);
+    syncDefaultVoice(voiceId);
+  };
+
+  const selectNarrator = (voiceId: string) => {
+    setDefaultNarrator(voiceId, 'restart');
+    syncDefaultVoice(voiceId);
   };
 
   const addVoice = async (name: string, languages: string[], audioUri?: string) => {
@@ -195,9 +248,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setVoices((prev) => [...prev.filter((voice) => voice.id !== created.id), created]);
   };
 
+  const retryVoice = async (voiceId: string) => {
+    const updated = await reenrollVoice(voiceId);
+    setVoices((prev) => prev.map((voice) => (voice.id === voiceId ? updated : voice)));
+  };
+
   const deleteVoice = async (voiceId: string) => {
     await deleteVoiceOnServer(voiceId);
     setVoices((prev) => prev.filter((item) => item.id !== voiceId));
+    if (voiceId === defaultNarratorId) setDefaultNarrator('');
   };
 
   const toggleFavorite = (storyId: string) => {
@@ -211,37 +270,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ? { ...currentStory, isFavorite: !currentStory.isFavorite }
         : currentStory
     );
-  };
-
-  const changeNarrator = (storyId: string, voiceId: string) => {
-    const current =
-      activeStory?.id === storyId
-        ? activeStory
-        : stories.find((story) => story.id === storyId);
-    if (!current) return;
-
-    const nextStory = {
-      ...current,
-      narratorId: voiceId,
-      audioUri: undefined,
-      clonedVoiceId: undefined,
-      clonedLanguage: undefined,
-      progress: 0,
-    };
-    void updateStory(storyId, {
-      narratorId: voiceId,
-      audioUri: undefined,
-      clonedVoiceId: undefined,
-      clonedLanguage: undefined,
-      progress: 0,
-    });
-    setStories((currentStories) =>
-      currentStories.map((story) => (story.id === storyId ? nextStory : story))
-    );
-    setActiveStory((currentStory) =>
-      currentStory?.id === storyId ? nextStory : currentStory
-    );
-    restartSpeech(nextStory);
   };
 
   const createNewStory = async (input: CreateStoryInput) => {
@@ -268,6 +296,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!saved) throw new Error('Could not save story');
 
     setStories((currentStories) => [newStory, ...currentStories]);
+    // The narrator picked in the form is an explicit choice: it becomes the global default.
+    // 'none': playStory below starts the new story, so the old one must not restart first.
+    if (input.narratorId !== defaultNarratorId) {
+      setDefaultNarrator(input.narratorId, 'none');
+      syncDefaultVoice(input.narratorId);
+    }
     playStory(newStory, true);
   };
 
@@ -287,19 +321,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         duration,
         playbackSpeed,
         setPlaybackSpeed,
+        sleepMode,
+        saveSleepMode,
         isRepeat,
         toggleRepeat,
         playStory,
         togglePlayPause,
+        pausePlayback,
         seekTo,
         skipTime,
         playNextStory,
         playPreviousStory,
+        defaultNarratorId,
+        defaultNarrator,
         setDefaultVoice,
         addVoice,
         deleteVoice,
+        retryVoice,
         toggleFavorite,
-        changeNarrator,
+        selectNarrator,
         narratorPickerStoryId,
         openNarratorPicker,
         createNewStory,

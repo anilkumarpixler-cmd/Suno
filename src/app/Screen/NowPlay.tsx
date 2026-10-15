@@ -36,7 +36,7 @@ export const NowPlayingScreen: React.FC = () => {
     playNextStory,
     playPreviousStory,
     toggleFavorite,
-    voices,
+    defaultNarrator: narrator,
     duration: trackDuration,
     setCurrentScreen,
     openNarratorPicker,
@@ -82,7 +82,6 @@ export const NowPlayingScreen: React.FC = () => {
 
   if (!activeStory) return null;
 
-  const narrator = voices.find((v) => v.id === activeStory.narratorId);
   const speedLabel = `${playbackSpeed}x`;
   const progressPct = Math.min(100, Math.max(0, (currentTime / duration) * 100));
 
@@ -157,7 +156,7 @@ export const NowPlayingScreen: React.FC = () => {
           </Text>
           <Text style={styles.subtitle} numberOfLines={1}>
             {isPreparingAudio
-              ? `Cloning ${narrator?.name || 'narrator'}…`
+              ? `Preparing story in ${narrator?.name || 'narrator'}'s voice…`
               : narrator
                 ? `${activeStory.category} · ${narrator.name}`
                 : `${activeStory.category} · System Voice`}
@@ -193,7 +192,7 @@ export const NowPlayingScreen: React.FC = () => {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.ctrlBtn}
-              onPress={playPreviousStory}
+              onPress={() => playPreviousStory()}
               accessibilityLabel="Previous story">
               <Text style={styles.ctrlIcon}>⏮</Text>
             </TouchableOpacity>
@@ -227,7 +226,7 @@ export const NowPlayingScreen: React.FC = () => {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.ctrlBtn}
-              onPress={playNextStory}
+              onPress={() => playNextStory()}
               accessibilityLabel="Next story">
               <Text style={styles.ctrlIcon}>⏭</Text>
             </TouchableOpacity>
@@ -277,7 +276,7 @@ export const NowPlayingScreen: React.FC = () => {
             name={narrator?.name || 'System Voice'}
             languages={
               isPreparingAudio
-                ? 'Cloning voice'
+                ? 'Preparing story'
                 : narrator
                   ? (narrator.languages || []).join(' · ') || 'Cloned voice'
                   : 'Device speech'

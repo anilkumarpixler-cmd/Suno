@@ -16,11 +16,17 @@ export interface Child {
   avatar: string;
 }
 
+/** Server-side narrator lifecycle; only `ready` narrators read stories in their own voice. */
+export type VoiceState = 'cloning' | 'saving_profile' | 'loading_gpu' | 'ready' | 'error';
+
 export interface Voice {
   id: string;
   name: string;
   languages: string[];
   status: 'Ready' | 'Processing' | 'Incomplete';
+  /** Missing on local/mock voices: treated as ready. */
+  state?: VoiceState;
+  stateError?: string;
   isDefault: boolean;
   avatar: string;
   audioUri?: string;
@@ -59,4 +65,5 @@ export type RootScreen =
   | 'NowPlaying'
   | 'AddVoice'
   | 'Favorites'
+  | 'SleepTimer'
   | 'GenerationLoader';
