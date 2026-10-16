@@ -53,10 +53,10 @@ export const SleepTimerScreen: React.FC = () => {
     try {
       await saveSleepMode(draft);
       setTouched(false);
-      showToast(draft.enabled ? 'Sleep mode saved' : 'Sleep mode turned off');
+      showToast(draft.enabled ? 'Sleep mode saved' : 'Sleep mode turned off', 'success');
       setCurrentScreen('Profile');
     } catch {
-      showToast('Could not save sleep mode. Please try again.');
+      showToast('Could not save sleep mode. Please try again.', 'error');
     } finally {
       setIsSaving(false);
     }

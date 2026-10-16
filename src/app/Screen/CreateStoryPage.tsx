@@ -122,7 +122,7 @@ export const CreateStoryScreen: React.FC = () => {
   const handleTitleChange = (text: string) => {
     const words = text.trim().split(/\s+/);
     if (words.length > 20 && text.endsWith(' ')) {
-      showToast('Story title cannot exceed 20 words');
+      showToast('Story title cannot exceed 20 words', 'error');
       return;
     }
     setTitle(text);
@@ -140,18 +140,18 @@ export const CreateStoryScreen: React.FC = () => {
   const handleCreateStory = () => {
     const storyTitle = title.trim();
     if (!storyTitle) {
-      showToast('Add a story title');
+      showToast('Add a story title', 'error');
       return;
     }
     if (getWordCount(storyTitle) > 20) {
-      showToast('Story title cannot exceed 20 words');
+      showToast('Story title cannot exceed 20 words', 'error');
       return;
     }
 
     const personalizedName = childName.trim() || child.name || 'Aarav';
     const script = topic.trim() || getFallbackScript(personalizedName, storyType, language);
     if (!script) {
-      showToast('Write what the story is about');
+      showToast('Write what the story is about', 'error');
       return;
     }
 
@@ -163,10 +163,10 @@ export const CreateStoryScreen: React.FC = () => {
       narratorId,
     })
       .then(() => {
-        showToast('Story created');
+        showToast('Story created', 'success');
       })
       .catch((error: unknown) => {
-        showToast(error instanceof Error ? error.message : 'Could not save story');
+        showToast(error instanceof Error ? error.message : 'Could not save story', 'error');
       });
   };
 
@@ -300,7 +300,8 @@ const makeStyles = (colors: ThemeColors) => ({
   },
   headerTitle: { color: colors.textDark, ...theme.typography.cardTitle },
   headerSpacer: { width: 36 },
-  content: { paddingHorizontal: 16, paddingTop: 28, paddingBottom: 32 },
+  // Extra bottom space so the Create button clears the mini player.
+  content: { paddingHorizontal: 16, paddingTop: 28, paddingBottom: 140 },
   heroCard: {
     height: 194,
     borderRadius: 28,

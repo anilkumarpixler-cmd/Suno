@@ -121,7 +121,8 @@ export default HomeScreen;
 
 const makeStyles = (colors: ThemeColors) => ({
   container: { flex: 1, backgroundColor: colors.background },
-  scrollContent: { padding: spacing.md },
+  // Extra bottom space so the last story clears the mini player.
+  scrollContent: { padding: spacing.md, paddingBottom: 140 },
   avatarBtn: {
     width: 36,
     height: 36,

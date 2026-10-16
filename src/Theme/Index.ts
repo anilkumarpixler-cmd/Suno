@@ -33,8 +33,8 @@ const lightColors = {
   sliderTrack: '#32324D',
   overlay: 'rgba(0, 0, 0, 0.5)',
   placeholder: '#63708A',
-  toastBg: '#1E1E2D',
-  toastText: '#FAF8F5',
+  toastBg: '#FFFFFF',
+  toastText: '#1E1E2D',
 };
 
 const darkColors: typeof lightColors = {

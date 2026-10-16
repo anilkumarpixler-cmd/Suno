@@ -134,7 +134,7 @@ export const NowPlayingScreen: React.FC = () => {
             onPress={() => {
               const nextFavorite = !activeStory.isFavorite;
               toggleFavorite(activeStory.id);
-              showToast(nextFavorite ? 'Added to favorites' : 'Removed from favorites');
+              showToast(nextFavorite ? 'Added to favorites' : 'Removed from favorites', 'success');
             }}
             accessibilityRole="button"
             accessibilityLabel={

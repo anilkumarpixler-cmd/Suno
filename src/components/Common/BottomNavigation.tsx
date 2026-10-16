@@ -22,7 +22,6 @@ export const BottomNavigation: React.FC<BottomNavProps> = ({ activeScreen, onSel
     <View style={styles.container}>
       {tabs.map((tab) => {
         const isActive = activeScreen === tab.key;
-        const isCreate = tab.key === 'Create';
 
         return (
           <TouchableOpacity
@@ -30,9 +29,7 @@ export const BottomNavigation: React.FC<BottomNavProps> = ({ activeScreen, onSel
             style={styles.tab}
             onPress={() => onSelectTab(tab.key)}
           >
-            <View style={[isCreate && styles.createPill]}>
-              <Text style={[styles.icon, isCreate && styles.createIcon]}>{tab.icon}</Text>
-            </View>
+            <Text style={styles.icon}>{tab.icon}</Text>
             <Text style={[styles.label, isActive && styles.activeLabel]}>{tab.label}</Text>
           </TouchableOpacity>
         );
@@ -67,16 +64,5 @@ const makeStyles = (colors: ThemeColors) => ({
     ...theme.typography.badge,
     color: colors.primary,
     marginTop: 2,
-  },
-  createPill: {
-    backgroundColor: colors.primary,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  createIcon: {
-    fontSize: 18,
   },
 });

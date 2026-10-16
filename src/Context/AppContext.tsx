@@ -70,6 +70,7 @@ const screenRoutes: Record<RootScreen, string> = {
   AddVoice: '/Screen/AddVoicePage',
   Favorites: '/Screen/FavoritesPage',
   SleepTimer: '/Screen/SleepTimerPage',
+  Appearance: '/Screen/AppearancePage',
   GenerationLoader: '/Screen/CreateStoryPage',
 };
 

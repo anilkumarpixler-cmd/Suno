@@ -137,14 +137,14 @@ export const FamilyVoicesScreen: React.FC = () => {
 
     if (isPicker) {
       selectNarrator(voiceId);
-      showToast(`${voice.name} is now narrating`);
+      showToast(`${voice.name} is now narrating`, 'success');
       setCurrentScreen('NowPlaying');
       return;
     }
 
     if (voiceId === defaultNarratorId) return;
     setDefaultVoice(voiceId);
-    showToast(`${voice.name} is now your default narrator`);
+    showToast(`${voice.name} is now your default narrator`, 'success');
   };
 
   const handlePreviewVoice = (voice: Voice) => {
@@ -172,9 +172,9 @@ export const FamilyVoicesScreen: React.FC = () => {
 
   const handleRetryVoice = (voiceId: string) => {
     retryVoice(voiceId)
-      .then(() => showToast('Preparing voice again…'))
+      .then(() => showToast('Preparing voice again…', 'success'))
       .catch((error: unknown) =>
-        showToast(error instanceof Error ? error.message : 'Could not prepare the voice'),
+        showToast(error instanceof Error ? error.message : 'Could not prepare the voice', 'error'),
       );
   };
 
@@ -185,7 +185,7 @@ export const FamilyVoicesScreen: React.FC = () => {
   const handleConfirmDelete = () => {
     const voice = voices.find((item) => item.id === pendingDeleteId);
     if (previewUri && voice?.audioUri === previewUri) setPreviewUri(null);
-    showToast(`${voice?.name ?? 'Voice'} deleted..`);
+    showToast(`${voice?.name ?? 'Voice'} deleted..`, 'success');
     if (pendingDeleteId) void deleteVoice(pendingDeleteId);
     setPendingDeleteId(null);
   };
@@ -250,7 +250,7 @@ export const FamilyVoicesScreen: React.FC = () => {
             style={styles.voiceCard}
             onPress={() => {
               selectNarrator('');
-              showToast('Using system voice');
+              showToast('Using system voice', 'success');
               setCurrentScreen('NowPlaying');
             }}
             accessibilityRole="button"
@@ -347,7 +347,8 @@ const makeStyles = (colors: ThemeColors) => ({
     fontWeight: '400' as const,
     lineHeight: 28,
   },
-  content: { paddingHorizontal: 19, paddingTop: 28, paddingBottom: 28 },
+  // Extra bottom space so the last button clears the mini player.
+  content: { paddingHorizontal: 19, paddingTop: 28, paddingBottom: 140 },
   heroCard: {
     height: 170,
     borderRadius: 28,

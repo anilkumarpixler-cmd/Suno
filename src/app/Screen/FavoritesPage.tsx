@@ -36,7 +36,7 @@ export const FavoritesScreen: React.FC = () => {
             onPress={() => playStory(story, true)}
             onRemove={() => {
               toggleFavorite(story.id);
-              showToast('Removed from favorites');
+              showToast('Removed from favorites', 'success');
             }}
           />
         )}
@@ -49,7 +49,8 @@ export default FavoritesScreen;
 
 const makeStyles = (colors: ThemeColors) => ({
   container: { flex: 1, backgroundColor: colors.background },
-  list: { padding: spacing.md, flexGrow: 1 },
+  // Extra bottom space so the last story clears the mini player.
+  list: { padding: spacing.md, paddingBottom: 140, flexGrow: 1 },
   empty: {
     flex: 1,
     alignItems: 'center' as const,

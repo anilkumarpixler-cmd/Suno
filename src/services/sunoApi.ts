@@ -22,13 +22,22 @@ export type TtsResult = {
   duration: number;
 };
 
+const GPU_NOT_CONNECTED = 'GPU not connected';
+const SERVER_NOT_CONNECTED = 'Server not connected';
+
+/** A server message as one short line for the user: no URLs or setup hints. */
+const shortError = (message: string) => {
+  if (/gpu|colab|kaggle|tunnel|notebook|cuda/i.test(message)) return GPU_NOT_CONNECTED;
+  return message.replace(/\s*\(?https?:\/\/\S+\)?/gi, '').trim() || SERVER_NOT_CONNECTED;
+};
+
 const toVoice = (item: VoiceDto): Voice => ({
   id: item.id,
   name: item.name,
   languages: item.languages || ['English'],
   status: item.status || 'Ready',
   state: item.state,
-  stateError: item.state_error || undefined,
+  stateError: item.state_error ? shortError(item.state_error) : undefined,
   isDefault: item.isDefault ?? item.is_default ?? false,
   avatar: item.avatar || '👤',
   audioUri: item.audioUri || item.audio_url,
@@ -37,10 +46,10 @@ const toVoice = (item: VoiceDto): Voice => ({
 const readError = async (response: Response) => {
   try {
     const data = await response.json();
-    if (typeof data.detail === 'string') return data.detail;
-    return data.message || response.statusText;
+    if (typeof data.detail === 'string') return shortError(data.detail);
+    return shortError(data.message || response.statusText);
   } catch {
-    return response.statusText;
+    return shortError(response.statusText);
   }
 };
 
@@ -48,7 +57,7 @@ const apiFetch = async (path: string, init?: RequestInit) => {
   try {
     return await fetch(`${API_BASE_URL}${path}`, init);
   } catch {
-    throw new Error(`Cannot reach ${API_BASE_URL}. Is suno-tts running on port 8002? Allow the port in Windows Firewall.`);
+    throw new Error(SERVER_NOT_CONNECTED);
   }
 };
 
@@ -69,7 +78,7 @@ export const uploadVoice = async (
   try {
     await fetch(`${API_BASE_URL}/health`);
   } catch {
-    throw new Error(`Cannot reach ${API_BASE_URL}. Start suno-tts on port 8002 and allow it in Windows Firewall.`);
+    throw new Error(SERVER_NOT_CONNECTED);
   }
 
   try {
@@ -87,7 +96,7 @@ export const uploadVoice = async (
     return toVoice((await response.json()) as VoiceDto);
   } catch (error) {
     if (error instanceof Error && !/network|failed/i.test(error.message)) throw error;
-    throw new Error('Upload failed after reaching the server. Try a shorter recording, or allow port 8002 in Windows Firewall.');
+    throw new Error('Upload failed. Try a shorter recording.');
   }
 };
 
@@ -172,7 +181,7 @@ export const fetchStoryStatus = async (id: string): Promise<StoryStatus> => {
   if (!response.ok) throw new Error(await readError(response));
   const data = await response.json();
   if (!data.done) return { done: false };
-  if (data.error) return { done: true, error: String(data.error) };
+  if (data.error) return { done: true, error: shortError(String(data.error)) };
   return {
     done: true,
     error: null,

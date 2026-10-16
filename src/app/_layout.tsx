@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as SystemUI from 'expo-system-ui';
@@ -35,23 +36,31 @@ function AppNavigator() {
   return (
     <>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: colors.background },
-          animation: 'fade',
-          animationDuration: 200,
-        }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="Screen/VoicePage" />
-        <Stack.Screen name="Screen/CreateStoryPage" />
-        <Stack.Screen name="Screen/ProfilePage" />
-        <Stack.Screen name="Screen/NowPlay" />
-        <Stack.Screen name="Screen/AddVoicePage" />
-        <Stack.Screen name="Screen/FavoritesPage" />
-        <Stack.Screen name="Screen/SleepTimerPage" />
-      </Stack>
-      {pathname !== '/Screen/NowPlay' && <MiniPlayerBar />}
+      <View style={styles.screenArea}>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.background },
+            animation: 'fade',
+            animationDuration: 200,
+          }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="Screen/VoicePage" />
+          <Stack.Screen name="Screen/CreateStoryPage" />
+          <Stack.Screen name="Screen/ProfilePage" />
+          <Stack.Screen name="Screen/NowPlay" />
+          <Stack.Screen name="Screen/AddVoicePage" />
+          <Stack.Screen name="Screen/FavoritesPage" />
+          <Stack.Screen name="Screen/SleepTimerPage" />
+          <Stack.Screen name="Screen/AppearancePage" />
+        </Stack>
+        {/* Floats over the screen: the content shows around the rounded card. */}
+        {pathname !== '/Screen/NowPlay' && (
+          <View style={styles.miniPlayer}>
+            <MiniPlayerBar />
+          </View>
+        )}
+      </View>
       {showBottomNavigation && (
         <BottomNavigation activeScreen={activeScreen} onSelectTab={setCurrentScreen} />
       )}
@@ -59,6 +68,11 @@ function AppNavigator() {
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  screenArea: { flex: 1 },
+  miniPlayer: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+});
 
 export default function AppLayout() {
   return (

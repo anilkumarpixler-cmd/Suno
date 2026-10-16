@@ -218,7 +218,7 @@ export const AddVoiceScreen: React.FC = () => {
     try {
       await addVoice(name, selectedLang.split(' + '), recordedUri);
       setCurrentScreen('Voices');
-      showToast('Voice saved successfully');
+      showToast('Voice saved successfully', 'success');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not save this voice. Please try again.';
       Alert.alert('Save error', message);
@@ -353,7 +353,8 @@ export default AddVoiceScreen;
 const makeStyles = (colors: ThemeColors) => ({
   container: { flex: 1, backgroundColor: colors.background },
   scroll: { flex: 1, overflow: 'visible' as const },
-  content: { padding: spacing.md, overflow: 'visible' as const },
+  // Extra bottom space so the privacy card clears the mini player.
+  content: { padding: spacing.md, paddingBottom: 140, overflow: 'visible' as const },
   formGroup: { marginBottom: spacing.lg },
   langGroup: { zIndex: 20 },
   dropdownWrap: { position: 'relative' as const },

@@ -382,7 +382,7 @@ export const useStoryPlayer = ({
     } catch (error) {
       if (speakId !== speakIdRef.current) return;
       const message = error instanceof Error ? error.message : 'Voice clone failed';
-      showToast(message);
+      showToast(message, 'error');
       if (!shouldPlayRef.current || storyRef.current?.id !== story.id) return;
       setAudioDuration(estimateDuration(story.script || story.title));
       speakWithDevice(story, resumeAt, speakId);
@@ -404,7 +404,7 @@ export const useStoryPlayer = ({
     }
 
     if (!canClone(narrator)) {
-      showToast('This narrator has no recording. Record a voice, or choose System Voice.');
+      showToast('This narrator has no recording. Record a voice, or choose System Voice.', 'error');
       setSource('idle');
       setIsPlaying(false);
       shouldPlayRef.current = false;
@@ -417,6 +417,7 @@ export const useStoryPlayer = ({
         narrator.state === 'error'
           ? `${narrator.name}'s voice could not be prepared. Playing in System Voice.`
           : `${narrator.name}'s voice is still being prepared. Playing in System Voice.`,
+        narrator.state === 'error' ? 'error' : 'info',
       );
       setAudioDuration(estimateDuration(story.script || story.title));
       speakWithDevice(story, time, speakId);
@@ -809,7 +810,7 @@ export const useStoryPlayer = ({
           return;
         }
         // The story broke off midway: carry on in System Voice from here.
-        showToast(result.error);
+        showToast(result.error, 'error');
         if (!shouldPlayRef.current || storyRef.current?.id !== stream.story.id) return;
         const speakId = ++speakIdRef.current;
         safePause();

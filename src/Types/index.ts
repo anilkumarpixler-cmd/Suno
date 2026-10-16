@@ -66,4 +66,5 @@ export type RootScreen =
   | 'AddVoice'
   | 'Favorites'
   | 'SleepTimer'
+  | 'Appearance'
   | 'GenerationLoader';

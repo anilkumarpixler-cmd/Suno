@@ -9,7 +9,7 @@ import { theme, ThemeColors } from '@/Theme/Index';
 import { appearanceLabel, useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 import { RootScreen } from '@/Types';
 
-type SettingIcon = 'globe' | 'moon' | 'microphone' | 'lock' | 'sun';
+export type SettingIcon = 'globe' | 'moon' | 'microphone' | 'lock' | 'sun' | 'device';
 
 export const IconContainer: React.FC<{ icon: SettingIcon }> = ({ icon }) => {
   const styles = useThemedStyles(makeStyles);
@@ -19,6 +19,7 @@ export const IconContainer: React.FC<{ icon: SettingIcon }> = ({ icon }) => {
     sun: '☼',
     microphone: '♩',
     lock: '▣',
+    device: '◐',
   }[icon];
 
   return (
@@ -109,7 +110,7 @@ const sleepModeLabel = (settings: SleepModeSettings) =>
 
 export const ProfileScreen: React.FC = () => {
   const { child, setCurrentScreen, sleepMode } = useApp();
-  const { mode, scheme, cycleMode } = useAppTheme();
+  const { mode, scheme } = useAppTheme();
   const styles = useThemedStyles(makeStyles);
 
   return (
@@ -129,7 +130,7 @@ export const ProfileScreen: React.FC = () => {
           title="Appearance"
           subtitle={`${appearanceLabel(mode)} · ${scheme === 'dark' ? 'Dark' : 'Light'}`}
           icon={scheme === 'dark' ? 'moon' : 'sun'}
-          onPress={cycleMode}
+          onPress={() => setCurrentScreen('Appearance')}
         />
         {settings.map((setting) => (
           <SettingsCard
@@ -168,7 +169,8 @@ export const SettingsPlaceholderScreen: React.FC<{ title: string }> = ({ title }
 
 const makeStyles = (colors: ThemeColors) => ({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 28 },
+  // Extra bottom space so the last setting clears the mini player.
+  content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 140 },
   profileCard: {
     minHeight: 90,
     paddingHorizontal: 16,

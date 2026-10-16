@@ -8,8 +8,6 @@ export type AppearanceMode = 'light' | 'dark' | 'system';
 
 const STORAGE_KEY = '@suno_appearance';
 
-const MODE_ORDER: AppearanceMode[] = ['system', 'light', 'dark'];
-
 export const appearanceLabel = (mode: AppearanceMode) =>
   ({ system: 'Match device', light: 'Light', dark: 'Dark' })[mode];
 
@@ -21,7 +19,6 @@ type ThemeContextValue = {
   colors: ThemeColors;
   gradients: Gradients;
   setMode: (mode: AppearanceMode) => void;
-  cycleMode: () => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
@@ -64,10 +61,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     void AsyncStorage.setItem(STORAGE_KEY, next);
   };
 
-  const cycleMode = () => {
-    setMode(MODE_ORDER[(MODE_ORDER.indexOf(mode) + 1) % MODE_ORDER.length]);
-  };
-
   const scheme: ColorScheme =
     mode === 'system' ? (system === 'dark' ? 'dark' : 'light') : mode;
   const palette = palettes[scheme];
@@ -84,7 +77,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       colors: palette.colors,
       gradients: palette.gradients,
       setMode,
-      cycleMode,
     }),
     [mode, scheme, palette],
   );
