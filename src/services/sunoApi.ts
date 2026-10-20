@@ -16,12 +16,6 @@ type VoiceDto = {
   audio_url?: string;
 };
 
-export type TtsResult = {
-  id: string;
-  audioUrl: string;
-  duration: number;
-};
-
 const GPU_NOT_CONNECTED = 'GPU not connected';
 const SERVER_NOT_CONNECTED = 'Server not connected';
 
@@ -75,11 +69,9 @@ export const uploadVoice = async (
 ): Promise<Voice> => {
   const { base64, filename } = await readRecordingBase64(audioUri);
 
-  try {
-    await fetch(`${API_BASE_URL}/health`);
-  } catch {
-    throw new Error(SERVER_NOT_CONNECTED);
-  }
+  // Offline, or a tunnel answering with its own error page: the server isn't there.
+  const health = await apiFetch('/health');
+  if (!health.ok) throw new Error(SERVER_NOT_CONNECTED);
 
   try {
     const response = await fetch(`${API_BASE_URL}/v1/voices/json`, {
@@ -96,7 +88,8 @@ export const uploadVoice = async (
     return toVoice((await response.json()) as VoiceDto);
   } catch (error) {
     if (error instanceof Error && !/network|failed/i.test(error.message)) throw error;
-    throw new Error('Upload failed. Try a shorter recording.');
+    // Connection lost during the upload (recordings are at most 30 s, so size isn't the cause).
+    throw new Error(SERVER_NOT_CONNECTED);
   }
 };
 
@@ -115,112 +108,72 @@ export const deleteVoiceOnServer = async (voiceId: string): Promise<void> => {
   if (!response.ok) throw new Error(await readError(response));
 };
 
-/** Clones the narrator again from its saved recording (after a failed enroll), in the background. */
-export const reenrollVoice = async (voiceId: string): Promise<Voice> => {
-  const response = await apiFetch(`/v1/voices/${voiceId}/enroll`, { method: 'POST' });
-  if (!response.ok) throw new Error(await readError(response));
-  return toVoice((await response.json()) as VoiceDto);
-};
-
 export type StoryItem = {
   text: string;
   language: string;
   voiceId: string;
 };
 
-export type StoryRead =
-  | ({ ready: true } & TtsResult)
-  | {
-      ready: false;
-      id: string;
-      /** One continuous live WAV (16-bit PCM); sound starts after the first sentence. */
-      streamUrl: string;
-      /** The saved file, available once the story has been read in full. */
-      audioUrl: string;
-      estimatedDuration: number;
-    };
-
-export type StoryStatus =
-  | { done: false }
-  | { done: true; error: string }
-  | ({ done: true; error: null } & TtsResult);
-
 /**
- * Story in an enrolled narrator's voice: the cached file when it exists (instant),
- * otherwise a live stream. The narrator's recording is never sent again.
+ * A story start: `ready` is the saved file (instant), `pending` is being read on the GPU
+ * (its whole file is at `audioUrl` once `waitStoryAudio` reports ready), `cancelled` means the
+ * play was stopped before the server started it.
  */
+export type StoryRead =
+  | { kind: 'ready'; key: string; audioUrl: string }
+  | { kind: 'pending'; key: string; audioUrl: string }
+  | { kind: 'cancelled' };
+
+export type StoryAudioStatus = { status: 'ready' | 'pending' } | { status: 'failed'; detail: string };
+
+/** Story in an enrolled narrator's voice. `playId` lets `cancelStoryPlay` stop its reading. */
 export const readStory = async (
   text: string,
   language: string,
   voiceId: string,
+  playId: string,
 ): Promise<StoryRead> => {
-  const response = await apiFetch('/v1/story/read', {
+  const response = await apiFetch('/v1/tts/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, language, voice_id: voiceId }),
+    body: JSON.stringify({ text, language, voice_id: voiceId, play_id: playId }),
   });
   if (!response.ok) throw new Error(await readError(response));
   const data = await response.json();
-  const id = String(data.id || '');
-  const audioUrl = typeof data.audio_url === 'string' ? data.audio_url : '';
-  if (!audioUrl) throw new Error('Story did not return audio.');
-  if (data.ready) return { ready: true, id, audioUrl, duration: Number(data.duration) || 1 };
-  const streamUrl = typeof data.stream_url === 'string' ? data.stream_url : '';
-  if (!streamUrl) throw new Error('Story did not return a stream.');
-  return {
-    ready: false,
-    id,
-    streamUrl,
-    audioUrl,
-    estimatedDuration: Number(data.estimated_duration) || 1,
-  };
+  if (data.cancelled) return { kind: 'cancelled' };
+  const key = String(data.story_key || '');
+  if (data.cached && typeof data.audio_url === 'string') {
+    return { kind: 'ready', key, audioUrl: data.audio_url };
+  }
+  if (data.streaming && typeof data.final_audio_url === 'string') {
+    return { kind: 'pending', key, audioUrl: data.final_audio_url };
+  }
+  throw new Error('Story has no text to read.');
 };
 
-export const fetchStoryStatus = async (id: string): Promise<StoryStatus> => {
-  const response = await apiFetch(`/v1/story/${id}/status`);
+/** Waits (up to 25 s, server side) for the story's whole file. */
+export const waitStoryAudio = async (key: string): Promise<StoryAudioStatus> => {
+  const response = await apiFetch(`/v1/tts/stream/${key}/final/wait?timeout=25`);
   if (!response.ok) throw new Error(await readError(response));
   const data = await response.json();
-  if (!data.done) return { done: false };
-  if (data.error) return { done: true, error: shortError(String(data.error)) };
-  return {
-    done: true,
-    error: null,
-    id,
-    audioUrl: String(data.audio_url || ''),
-    duration: Number(data.duration) || 1,
-  };
+  if (data.status === 'failed') {
+    return { status: 'failed', detail: shortError(String(data.detail || 'Story could not be read')) };
+  }
+  return { status: data.status === 'ready' ? 'ready' : 'pending' };
 };
 
-/** One story start as the app saw it, in ms since the tap: the server logs the whole chain. */
-export type StoryTiming = {
-  readResponseMs: number;
-  playerStartMs: number;
-  firstSoundMs: number;
-  cached: boolean;
-};
-
-/** Best effort, never throws: feeds the server's `[timing] SUMMARY` log line. */
-export const reportStoryTiming = (id: string, timing: StoryTiming) => {
-  void fetch(`${API_BASE_URL}/v1/story/${id}/timing`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      read_response_ms: timing.readResponseMs,
-      player_start_ms: timing.playerStartMs,
-      first_sound_ms: timing.firstSoundMs,
-      cached: timing.cached,
-    }),
+/** Stops reading a story nobody listens to any more. Best effort, never throws. */
+export const cancelStoryPlay = (playId: string) => {
+  void fetch(`${API_BASE_URL}/v1/tts/stream/play/${encodeURIComponent(playId)}`, {
+    method: 'DELETE',
   }).catch(() => undefined);
 };
 
-/** Background pre-reading so a later narrator pick plays at once. Best effort, never throws. */
-export const prepareStories = (items: StoryItem[]) => {
-  if (items.length === 0) return;
-  void fetch(`${API_BASE_URL}/v1/story/prepare`, {
+/** Background start of a story's reading, so it is ready sooner. Best effort, never throws. */
+export const prefetchStory = (item: StoryItem) => {
+  void fetch(`${API_BASE_URL}/v1/tts/stream/prefetch`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      items: items.map((item) => ({ text: item.text, language: item.language, voice_id: item.voiceId })),
-    }),
+    body: JSON.stringify({ text: item.text, language: item.language, voice_id: item.voiceId }),
   }).catch(() => undefined);
 };

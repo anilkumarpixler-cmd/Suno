@@ -1,8 +1,19 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootScreen } from '../../Types';
 import { theme, ThemeColors } from '../../Theme/Index';
 import { useThemedStyles } from '../../Theme/ThemeProvider';
+
+// Icon + label row, above the bottom gap.
+const TAB_ROW_HEIGHT = 52;
+
+/** The inset is the bottom gap; a small one only where the phone has no nav bar. */
+const bottomGapFor = (insetBottom: number) => Math.max(insetBottom, 8);
+
+/** Full height of the tab bar on this phone (for laying things out above it). */
+export const bottomNavigationHeight = (insetBottom: number) =>
+  TAB_ROW_HEIGHT + bottomGapFor(insetBottom);
 
 interface BottomNavProps {
   activeScreen: RootScreen;
@@ -11,6 +22,10 @@ interface BottomNavProps {
 
 export const BottomNavigation: React.FC<BottomNavProps> = ({ activeScreen, onSelectTab }) => {
   const styles = useThemedStyles(makeStyles);
+  // Edge-to-edge: the phone's nav bar (3-button, gesture line, iPhone home indicator) draws over
+  // the app. The bar's background runs under it; the tabs sit just above it. 0 when there is none.
+  const { bottom } = useSafeAreaInsets();
+  const bottomGap = bottomGapFor(bottom);
   const tabs: { key: RootScreen; label: string; icon: string }[] = [
     { key: 'Home', label: 'Home', icon: '🏠' },
     { key: 'Voices', label: 'Voices', icon: '🎙️' },
@@ -19,7 +34,7 @@ export const BottomNavigation: React.FC<BottomNavProps> = ({ activeScreen, onSel
   ];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { height: bottomNavigationHeight(bottom), paddingBottom: bottomGap }]}>
       {tabs.map((tab) => {
         const isActive = activeScreen === tab.key;
 
@@ -40,12 +55,10 @@ export const BottomNavigation: React.FC<BottomNavProps> = ({ activeScreen, onSel
 
 const makeStyles = (colors: ThemeColors) => ({
   container: {
-    height: 70,
     backgroundColor: colors.navBg,
     flexDirection: 'row' as const,
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
-    paddingBottom: 10,
   },
   tab: {
     flex: 1,

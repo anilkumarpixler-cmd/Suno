@@ -47,6 +47,7 @@ export const PreviewModal = ({
       visible={previewUri !== null}
       transparent
       animationType="fade"
+      supportedOrientations={['portrait', 'landscape']}
       onRequestClose={() => setPreviewUri(null)}
     >
       <View style={styles.modalOverlay}>

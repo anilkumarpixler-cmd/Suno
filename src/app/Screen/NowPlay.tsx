@@ -6,6 +6,7 @@ import {
   ScrollView,
   PanResponder,
   LayoutChangeEvent,
+  useWindowDimensions,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -47,6 +48,9 @@ export const NowPlayingScreen: React.FC = () => {
   } = useApp();
   const { gradients, colors } = useAppTheme();
   const styles = useThemedStyles(makeStyles);
+  // Landscape: a smaller artwork so the title and controls stay in view on the short screen.
+  const { height: windowHeight } = useWindowDimensions();
+  const artSize = Math.min(220, Math.round(windowHeight * 0.4));
   const [speedOpen, setSpeedOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const barWidthRef = useRef(1);
@@ -57,33 +61,43 @@ export const NowPlayingScreen: React.FC = () => {
   const duration = Math.max(1, trackDuration || activeStory?.duration || 1);
   durationRef.current = duration;
 
-  const scrubberPan = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: (event) => {
-          const width = barWidthRef.current;
-          if (width <= 0) return;
-          seekToRef.current(
-            Math.max(0, Math.min(1, event.nativeEvent.locationX / width)) * durationRef.current,
-          );
-        },
-        onPanResponderMove: (event) => {
-          const width = barWidthRef.current;
-          if (width <= 0) return;
-          seekToRef.current(
-            Math.max(0, Math.min(1, event.nativeEvent.locationX / width)) * durationRef.current,
-          );
-        },
-      }),
-    [],
-  );
+  // While dragging only the bar moves; the story seeks once, on release. Seeking on every move
+  // restarted playback dozens of times a second (and overran React's update limit).
+  const [dragTime, setDragTime] = useState<number | null>(null);
+  const dragTimeRef = useRef<number | null>(null);
+
+  const scrubberPan = useMemo(() => {
+    const track = (locationX: number) => {
+      const width = barWidthRef.current;
+      if (width <= 0) return;
+      const time = Math.max(0, Math.min(1, locationX / width)) * durationRef.current;
+      // Re-render only when the shown second changes.
+      if (dragTimeRef.current === null || Math.floor(time) !== Math.floor(dragTimeRef.current)) {
+        setDragTime(time);
+      }
+      dragTimeRef.current = time;
+    };
+    const release = () => {
+      const time = dragTimeRef.current;
+      dragTimeRef.current = null;
+      setDragTime(null);
+      if (time !== null) seekToRef.current(time);
+    };
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (event) => track(event.nativeEvent.locationX),
+      onPanResponderMove: (event) => track(event.nativeEvent.locationX),
+      onPanResponderRelease: release,
+      onPanResponderTerminate: release,
+    });
+  },[]);
 
   if (!activeStory) return null;
 
   const speedLabel = `${playbackSpeed}x`;
-  const progressPct = Math.min(100, Math.max(0, (currentTime / duration) * 100));
+  const shownTime = dragTime ?? currentTime;
+  const progressPct = Math.min(100, Math.max(0, (shownTime / duration) * 100));
 
   const onSliderLayout = (event: LayoutChangeEvent) => {
     barWidthRef.current = event.nativeEvent.layout.width;
@@ -147,8 +161,12 @@ export const NowPlayingScreen: React.FC = () => {
             />
           </TouchableOpacity>
 
-          <LinearGradient colors={gradients.playerArt} style={styles.artBox}>
-            <Text style={styles.artEmoji}>{activeStory.artwork}</Text>
+          <LinearGradient
+            colors={gradients.playerArt}
+            style={[styles.artBox, { width: artSize, height: artSize }]}>
+            <Text style={[styles.artEmoji, { fontSize: Math.round(artSize * 0.44) }]}>
+              {activeStory.artwork}
+            </Text>
           </LinearGradient>
 
           <Text style={styles.title} numberOfLines={2}>
@@ -166,14 +184,15 @@ export const NowPlayingScreen: React.FC = () => {
             style={styles.sliderHit}
             onLayout={onSliderLayout}
             {...scrubberPan.panHandlers}>
-            <View style={styles.sliderBg}>
+            {/* Touches go to the full-width bar, never the thumb: locationX is from the bar's start. */}
+            <View style={styles.sliderBg} pointerEvents="none">
               <View style={[styles.sliderFill, { width: `${progressPct}%` }]} />
               <View style={[styles.sliderThumb, { left: `${progressPct}%` }]} />
             </View>
           </View>
 
           <View style={styles.timeRow}>
-            <Text style={styles.timeText}>{formatTime(currentTime)}</Text>
+            <Text style={styles.timeText}>{formatTime(shownTime)}</Text>
             <Text style={styles.timeText}>{formatTime(duration)}</Text>
           </View>
 

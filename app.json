@@ -3,7 +3,7 @@
     "name": "Suno Story",
     "slug": "Suno_Stories",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/new icon.png",
     "scheme": "sunostories",
     "userInterfaceStyle": "automatic",
@@ -46,7 +46,7 @@
         {
           "backgroundColor": "#1b083d",
           "image": "./assets/images/splash.png",
-          "imageWidth": 76,
+          "imageWidth": 200,
           "imageStyle": "contain"
         }
       ],
@@ -61,7 +61,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "6886d0cb-dec4-437c-96e8-025cf9e47b08"
+        "projectId": "d896949a-4c12-44c2-a190-aaaccc00ffea"
       }
     }
   }

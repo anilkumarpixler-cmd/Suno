@@ -20,7 +20,12 @@ type TimePickerModalProps = {
 export const TimePickerModal = ({ visible, title, minutes, onCancel, onConfirm }: TimePickerModalProps) => {
   const styles = useThemedStyles(makeStyles);
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      supportedOrientations={['portrait', 'landscape']}
+      onRequestClose={onCancel}>
       <Pressable style={styles.modalOverlay} onPress={onCancel}>
         <Pressable style={styles.card} onPress={(event) => event.stopPropagation()}>
           {/* Mounted only while visible, so every open starts from the current value. */}
@@ -76,6 +81,8 @@ const makeStyles = (colors: ThemeColors) => ({
   },
   card: {
     width: '85%' as const,
+    // Landscape: keeps the card phone-sized instead of 85% of a wide screen.
+    maxWidth: 420,
     backgroundColor: colors.cardBg,
     borderRadius: 21,
     borderWidth: 1,

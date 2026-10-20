@@ -13,9 +13,16 @@ import {
 
 // Foreground re-check while playing, so the pause lands within this long of the start time.
 const FOREGROUND_CHECK_MS = 30_000;
-// Heads-up toast this long before sleep mode starts, checked this often while the app is open.
-const WARNING_LEAD_SECONDS = 5 * 60;
-const WARNING_CHECK_MS = 10_000;
+// Heads-up toasts this long before sleep mode starts (5 min, then 3 min later), ascending.
+const WARNING_LEADS_SECONDS = [2 * 60, 5 * 60];
+// How often the countdown is checked while the app is open; each toast lands within this.
+const WARNING_CHECK_MS = 5_000;
+// A start toast is only shown for a start that was counted down to, within this many minutes.
+const START_TOAST_WINDOW_MINUTES = 2;
+
+/** Sleep mode toasts sit at the top and stay longer than the usual ones. */
+export const showSleepToast = (message: string) =>
+  showToast(message, 'info', { position: 'top', durationMs: 5000, icon: 'moon' });
 
 type UseSleepModeArgs = {
   isPlaying: boolean;
@@ -66,11 +73,16 @@ export const useSleepMode = ({ isPlaying, currentTime, onSleep }: UseSleepModeAr
 
   const sleepUntilLabel = () => formatTime(sleepModeRef.current.endMinutes);
 
+  // The next start being counted down to (minute timestamp) and the smallest lead announced for it.
+  const upcomingRef = useRef<{ startsAt: number; lead: number } | null>(null);
+
   /** Pauses playback if it is running inside the sleep window. */
   const enforce = () => {
     if (!isPlayingRef.current || !isSleepTimeNow()) return;
     onSleepRef.current();
-    showToast(`Sleep mode: stories paused until ${sleepUntilLabel()}`);
+    // This toast doubles as the start announcement.
+    upcomingRef.current = null;
+    showSleepToast(`Sleep mode: stories paused until ${sleepUntilLabel()}`);
   };
 
   // Progress updates (also in the background), play state and settings changes.
@@ -81,18 +93,32 @@ export const useSleepMode = ({ isPlaying, currentTime, onSleep }: UseSleepModeAr
     return () => clearInterval(interval);
   }, [sleepMode, isPlaying, currentTime]);
 
-  // 5-minute heads-up, once per upcoming start. Runs on a JS timer, i.e. only while the app is
-  // open, which is also the only time a toast can be seen.
-  const lastWarnedStartRef = useRef<number | null>(null);
-  const warnIfSleepSoon = () => {
+  // Heads-ups at 5 and 2 minutes before, then one at the start; each once per upcoming start.
+  // Runs on a JS timer, i.e. only while the app is open, which is also the only time a toast can
+  // be seen.
+  const announceSleep = () => {
+    const upcoming = upcomingRef.current;
+    if (isSleepTimeNow()) {
+      if (!upcoming) return;
+      upcomingRef.current = null;
+      // Not when coming back long after the start: that start was never announced on time.
+      const minutesSinceStart = Date.now() / 60_000 - upcoming.startsAt;
+      if (Math.abs(minutesSinceStart) > START_TOAST_WINDOW_MINUTES) return;
+      if (isPlayingRef.current) enforce();
+      else showSleepToast(`Sleep mode is on. Stories are paused until ${sleepUntilLabel()}.`);
+      return;
+    }
+
     const seconds = secondsUntilSleep(sleepModeRef.current);
-    if (seconds === null || seconds > WARNING_LEAD_SECONDS) return;
-    // Identify this start by its (minute-rounded) timestamp so it is announced only once.
+    if (seconds === null) return;
+    const lead = WARNING_LEADS_SECONDS.find((l) => seconds <= l);
+    if (lead === undefined) return;
+    // Identify this start by its (minute-rounded) timestamp so each lead is announced only once.
     const startsAt = Math.round((Date.now() + seconds * 1000) / 60_000);
-    if (lastWarnedStartRef.current === startsAt) return;
-    lastWarnedStartRef.current = startsAt;
+    if (upcoming?.startsAt === startsAt && upcoming.lead <= lead) return;
+    upcomingRef.current = { startsAt, lead };
     const minutes = Math.max(1, Math.ceil(seconds / 60));
-    showToast(
+    showSleepToast(
       `Sleep mode starts in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} (${formatTime(
         sleepModeRef.current.startMinutes,
       )}). Stories will pause.`,
@@ -101,8 +127,8 @@ export const useSleepMode = ({ isPlaying, currentTime, onSleep }: UseSleepModeAr
 
   useEffect(() => {
     if (!sleepMode.enabled) return;
-    warnIfSleepSoon();
-    const interval = setInterval(warnIfSleepSoon, WARNING_CHECK_MS);
+    announceSleep();
+    const interval = setInterval(announceSleep, WARNING_CHECK_MS);
     return () => clearInterval(interval);
   }, [sleepMode]);
 
@@ -111,7 +137,7 @@ export const useSleepMode = ({ isPlaying, currentTime, onSleep }: UseSleepModeAr
     const subscription = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return;
       enforce();
-      warnIfSleepSoon();
+      announceSleep();
     });
     return () => subscription.remove();
   }, []);

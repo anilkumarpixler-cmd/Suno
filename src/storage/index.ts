@@ -6,6 +6,8 @@ export {
 	updateStory,
 	deleteStory,
 	clearStories,
+	getDeletedStoryIds,
+	markStoryDeleted,
 } from './storyStorage';
 
 export type { Story } from '../Types';

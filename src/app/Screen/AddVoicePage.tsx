@@ -72,6 +72,9 @@ export const AddVoiceScreen: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   // Ref, not state: a second tap can arrive before the re-render that disables the button.
   const savingRef = useRef(false);
+  // Same for Start / Retake: the button only hides once the recorder reports it is recording.
+  const startingRef = useRef(false);
+  const [isStarting, setIsStarting] = useState(false);
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
@@ -133,7 +136,10 @@ export const AddVoiceScreen: React.FC = () => {
       return;
     }
     if (nameTaken) return;
+    if (startingRef.current || recorder.isRecording) return;
 
+    startingRef.current = true;
+    setIsStarting(true);
     try {
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) {
@@ -154,6 +160,9 @@ export const AddVoiceScreen: React.FC = () => {
     } catch {
       endRecordingAudio();
       Alert.alert('Recording error', 'Could not start recording. Please try again.');
+    } finally {
+      startingRef.current = false;
+      setIsStarting(false);
     }
   };
 
@@ -220,8 +229,9 @@ export const AddVoiceScreen: React.FC = () => {
       setCurrentScreen('Voices');
       showToast('Voice saved successfully', 'success');
     } catch (error) {
+      // The recording stays on the screen, so Save can be tapped again once the server is back.
       const message = error instanceof Error ? error.message : 'Could not save this voice. Please try again.';
-      Alert.alert('Save error', message);
+      showToast(message, 'error');
       savingRef.current = false;
       setIsSaving(false);
     }
@@ -300,11 +310,11 @@ export const AddVoiceScreen: React.FC = () => {
 
           {!isRecording && !isRecorded && (
             <TouchableOpacity
-              style={[styles.recBtn, !nameUsable && styles.disabledBtn]}
-              disabled={!nameUsable}
+              style={[styles.recBtn, (!nameUsable || isStarting) && styles.disabledBtn]}
+              disabled={!nameUsable || isStarting}
               onPress={handleStartRecording}
             >
-              <Text style={styles.recBtnText}>Start recording</Text>
+              <Text style={styles.recBtnText}>{isStarting ? 'Starting…' : 'Start recording'}</Text>
             </TouchableOpacity>
           )}
 
@@ -317,8 +327,8 @@ export const AddVoiceScreen: React.FC = () => {
           {isRecorded && (
             <View style={styles.postRecRow}>
               <TouchableOpacity
-                style={[styles.secondaryBtn, isSaving && styles.disabledBtn]}
-                disabled={isSaving}
+                style={[styles.secondaryBtn, (isSaving || isStarting) && styles.disabledBtn]}
+                disabled={isSaving || isStarting}
                 onPress={handleRetake}
               >
                 <Text style={styles.secondaryText}>Retake</Text>

@@ -2,6 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Story } from '../Types';
 
 export const STORIES_STORAGE_KEY = '@suno_stories';
+// Ids of deleted stories: the built-in stories come from mockData, not storage, and would
+// otherwise come back on the next start.
+const DELETED_STORIES_STORAGE_KEY = '@suno_deleted_stories';
 
 const logStorageError = (operation: string, error: unknown) => {
   if (__DEV__) console.error(`Unable to ${operation} stories`, error);
@@ -75,6 +78,29 @@ export const deleteStory = async (id: string): Promise<boolean> => {
     return false;
   }
 };
+export const getDeletedStoryIds = async (): Promise<string[]> => {
+  try {
+    const value = await AsyncStorage.getItem(DELETED_STORIES_STORAGE_KEY);
+    const parsed: unknown = value ? JSON.parse(value) : [];
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+  } catch (error) {
+    logStorageError('read deleted', error);
+    return [];
+  }
+};
+
+export const markStoryDeleted = async (id: string): Promise<boolean> => {
+  try {
+    const ids = await getDeletedStoryIds();
+    if (ids.includes(id)) return true;
+    await AsyncStorage.setItem(DELETED_STORIES_STORAGE_KEY, JSON.stringify([...ids, id]));
+    return true;
+  } catch (error) {
+    logStorageError('mark deleted', error);
+    return false;
+  }
+};
+
 export const clearStories = async (): Promise<boolean> => {
   try {
     await AsyncStorage.removeItem(STORIES_STORAGE_KEY);

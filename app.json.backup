@@ -1,0 +1,68 @@
+{
+  "expo": {
+    "name": "Suno Story",
+    "slug": "Suno_Stories",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/images/new icon.png",
+    "scheme": "sunostories",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.arashdeepkaur.SunoStories"
+    },
+    "android": {
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/new icon.png",
+        "backgroundImage": "./assets/images/new icon.png",
+        "monochromeImage": "./assets/images/new icon.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.arashdeepkaur.Suno_Stories"
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/new icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow Suno Stories to record family voices.",
+          "enableBackgroundPlayback": true
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#1b083d",
+          "image": "./assets/images/splash.png",
+          "imageWidth": 200,
+          "imageStyle": "contain"
+        }
+      ],
+      "expo-image",
+      "expo-web-browser",
+      "expo-asset"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6886d0cb-dec4-437c-96e8-025cf9e47b08"
+      }
+    }
+  }
+}

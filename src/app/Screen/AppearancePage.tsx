@@ -30,6 +30,7 @@ export const AppearanceScreen: React.FC = () => {
     <SafeAreaView style={styles.container}>
       <Header title="Appearance" showBack onBack={() => setCurrentScreen('Profile')} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View accessibilityRole="radiogroup" accessibilityLabel="Appearance">
         {options.map((option) => {
           const selected = option.mode === mode;
           const title = appearanceLabel(option.mode);
@@ -44,7 +45,8 @@ export const AppearanceScreen: React.FC = () => {
               style={[styles.optionCard, selected && styles.optionCardSelected]}
               onPress={() => setMode(option.mode)}
               accessibilityRole="radio"
-              accessibilityState={{ selected }}
+              // Radios are read by `checked` ("checked" / "not checked"), not `selected`.
+              accessibilityState={{ checked: selected }}
               accessibilityLabel={`${title}, ${subtitle}`}>
               <IconContainer icon={option.icon} />
               <View style={styles.optionDetails}>
@@ -59,6 +61,7 @@ export const AppearanceScreen: React.FC = () => {
             </Pressable>
           );
         })}
+        </View>
         <Text style={styles.caption}>Your choice is saved on this device.</Text>
       </ScrollView>
     </SafeAreaView>

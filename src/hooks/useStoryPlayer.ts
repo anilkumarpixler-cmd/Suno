@@ -2,20 +2,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEventListener } from 'expo';
 import { setAudioModeAsync, useAudioPlayer, type AudioMode, type AudioStatus } from 'expo-audio';
 import { useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { RootScreen, Story, Voice } from '../Types';
-import {
-  fetchStoryStatus,
-  prepareStories,
-  readStory,
-  reportStoryTiming,
-  type StoryItem,
-  type TtsResult,
-} from '../services/sunoApi';
+import { cancelStoryPlay, prefetchStory, readStory, waitStoryAudio } from '../services/sunoApi';
 import { showToast } from '../components/Common/Toast';
 import type { DeviceMediaCommand } from '../../modules/suno-media-session';
 import { useDeviceMediaSession } from './useDeviceMediaSession';
 import { useLockScreenControls } from './useLockScreenControls';
-import { useSleepMode } from './useSleepMode';
+import { showSleepToast, useSleepMode } from './useSleepMode';
 import {
   estimateDuration,
   languageToLocale,
@@ -69,35 +63,13 @@ const isVoiceReady = (voice?: Voice) => Boolean(voice && (!voice.state || voice.
 
 const storyText = (story: Story) => story.script || story.title;
 
-const STATUS_POLL_MS = 1000;
-/** A saved live story ends this close to its exact length (the player itself never ends it). */
-const LIVE_END_TOLERANCE_S = 0.1;
-/** While a live story is still being read, its estimated length stays this far ahead of the time. */
-const LIVE_DURATION_HEADROOM_S = 2;
+/** A finished story shows its full time (e.g. 0:13 / 0:13) this long before repeat / auto-next. */
+const END_HOLD_MS = 800;
 
-/** One cloned story start, timed from the tap (Date.now) until the first sound. */
-type StartTiming = {
-  speakId: number;
-  tapAt: number;
-  id: string;
-  readAt: number;
-  playerAt: number;
-  cached: boolean;
-};
-
-/** A narrator playing as a live stream while the server is still reading the story. */
-type StoryStream = {
-  id: string;
-  streamUrl: string;
-  /** The saved file; replaces the stream on the first seek after the story is done. */
-  audioUrl: string;
-  done: boolean;
-  /**
-   * Exact length, once the server has saved the story. The live WAV can't declare its length,
-   * so the player reads it as ~24 h: past this point it plays silence and never finishes.
-   */
-  duration?: number;
+/** A narrator track whose real length the player has not reported yet (saved once it does). */
+type PendingSave = {
   story: Story;
+  audioUrl: string;
   voiceId: string;
   language: string;
 };
@@ -136,17 +108,15 @@ export const useStoryPlayer = ({
   const isRepeatRef = useRef(false);
   const storiesRef = useRef(stories);
   const endingRef = useRef(false);
+  // Pending repeat / auto-next while the finished story's end time is on screen.
+  const endHoldRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasStartedRef = useRef(false);
   const onStoryEndedRef = useRef<() => void>(() => undefined);
   // True once the TTS engine reports word boundaries for the current utterance.
   const boundarySeenRef = useRef(false);
-  // Live story stream: its duration is an estimate until the server reports the real one.
-  const streamRef = useRef<StoryStream | null>(null);
-  // Dev only: when a playing live stream ran dry (a gap the listener hears), 0 while playing.
-  const stallAtRef = useRef(0);
-  const [streamingId, setStreamingId] = useState<string | null>(null);
-  // Tap -> first sound of the current cloned story; reported once, then cleared.
-  const startTimingRef = useRef<StartTiming | null>(null);
+  // The narrator story the server is reading right now (cancelled when no longer wanted).
+  const playIdRef = useRef('');
+  const pendingSaveRef = useRef<PendingSave | null>(null);
 
   useEffect(() => {
     void setAudioModeAsync(STORY_AUDIO_MODE).catch(() => undefined);
@@ -207,57 +177,44 @@ export const useStoryPlayer = ({
     }
   };
 
-  const clearStream = () => {
-    streamRef.current = null;
-    setStreamingId(null);
+  /** Stops the server reading a narrator story this app no longer waits for. */
+  const cancelServerRead = () => {
+    if (!playIdRef.current) return;
+    cancelStoryPlay(playIdRef.current);
+    playIdRef.current = '';
+  };
+
+  /** Any user action during the end hold replaces the pending repeat / auto-next. */
+  const cancelEndHold = () => {
+    if (!endHoldRef.current) return;
+    clearTimeout(endHoldRef.current);
+    endHoldRef.current = null;
+    endingRef.current = false;
   };
 
   const haltSpeech = () => {
+    cancelEndHold();
     shouldPlayRef.current = false;
+    if (playbackSourceRef.current === 'preparing') cancelServerRead();
     setSource('idle');
     safePause();
     stopSpeech();
-    clearStream();
   };
 
   /**
-   * Background pre-reading in the current narrator: this story and the next playlist story
-   * (already queued by the library pre-read below unless the narrator just changed; the server
-   * skips stories saved or queued). A tapped story never waits behind pre-reading: the server
-   * pauses it for a live stream.
-   * `skipVoiceId` is the narrator this story is already being played / streamed in.
+   * Background start of the next playlist story in the current narrator, so it is ready sooner.
+   * The server only reads the first part ahead, and drops it when another story starts.
    */
-  const prepareAhead = (story: Story, skipVoiceId = '') => {
+  const prepareAhead = (story: Story) => {
     const narrator = voices.find((voice) => voice.id === defaultNarratorIdRef.current);
     if (!narrator || !canClone(narrator) || !isVoiceReady(narrator)) return;
 
     const list = storiesRef.current;
     const index = list.findIndex((item) => item.id === story.id);
-    const next = index >= 0 && list.length > 1 ? list[(index + 1) % list.length] : undefined;
-    const items: StoryItem[] = [];
-    for (const target of next ? [story, next] : [story]) {
-      if (target === story && narrator.id === skipVoiceId) continue;
-      items.push({ text: storyText(target), language: resolveLanguage(target), voiceId: narrator.id });
-    }
-    prepareStories(items);
+    if (index < 0 || list.length < 2) return;
+    const next = list[(index + 1) % list.length];
+    prefetchStory({ text: storyText(next), language: resolveLanguage(next), voiceId: narrator.id });
   };
-
-  // The whole library is read in the background as soon as the narrator is ready, so a tap
-  // plays the saved file at once (no first-chunk wait, no live chunks). The half-heard
-  // "Continue listening" story goes first. The server skips stories already saved or queued.
-  const preparedLibraryRef = useRef('');
-  useEffect(() => {
-    const narrator = voices.find((voice) => voice.id === defaultNarratorId);
-    if (!narrator || !canClone(narrator) || !isVoiceReady(narrator) || stories.length === 0) return;
-    const resume = stories.find((story) => story.progress > 1);
-    const ordered = resume ? [resume, ...stories.filter((story) => story !== resume)] : stories;
-    const key = `${narrator.id}:${stories.map((story) => `${story.id}/${storyText(story).length}`).join(',')}`;
-    if (preparedLibraryRef.current === key) return;
-    preparedLibraryRef.current = key;
-    prepareStories(
-      ordered.map((story) => ({ text: storyText(story), language: resolveLanguage(story), voiceId: narrator.id })),
-    );
-  }, [defaultNarratorId, voices, stories]);
 
   const speakWithDevice = (story: Story, time: number, speakId: number) => {
     setSource('device');
@@ -305,10 +262,7 @@ export const useStoryPlayer = ({
     const start =
       resumeAt > 0.4 && resumeAt < trackDuration - 0.5 ? resumeAt : 0;
     hasStartedRef.current = false;
-    stallAtRef.current = 0;
     setTime(start);
-    const timing = startTimingRef.current;
-    if (timing) timing.playerAt = Date.now();
     if (start === 0) {
       // Play at once: ExoPlayer starts the moment enough audio is buffered, instead of after
       // the next "loaded" status event (up to one update interval later).
@@ -325,60 +279,54 @@ export const useStoryPlayer = ({
     player.replace(audioUrl);
   };
 
-  const saveClonedAudio = (story: Story, voiceId: string, language: string, result: TtsResult) => {
+  /** Called with the player's real length of a narrator track (the server reports none). */
+  const saveClonedAudio = (save: PendingSave, duration: number) => {
+    const { story, audioUrl, voiceId, language } = save;
     if (
-      story.audioUri === result.audioUrl &&
+      story.audioUri === audioUrl &&
       story.clonedVoiceId === voiceId &&
-      story.duration === result.duration
+      story.duration === duration
     ) {
       return;
     }
-    onClonedAudio?.(story.id, result.audioUrl, result.duration, voiceId, language);
+    onClonedAudio?.(story.id, audioUrl, duration, voiceId, language);
     if (storyRef.current?.id !== story.id) return;
     storyRef.current = {
       ...storyRef.current,
-      audioUri: result.audioUrl,
+      audioUri: audioUrl,
       clonedVoiceId: voiceId,
       clonedLanguage: language,
-      duration: result.duration,
+      duration,
     };
   };
 
   const playClonedAudio = async (story: Story, voice: Voice, resumeAt: number, speakId: number) => {
+    const isCurrent = () => speakId === speakIdRef.current && shouldPlayRef.current;
     try {
       const language = resolveLanguage(story);
-      // The server answers from its cache at once, or starts a stream that plays after the
-      // first sentence, using the narrator's saved voice profile (no re-cloning).
-      const started = await readStory(storyText(story), language, voice.id);
-      if (speakId !== speakIdRef.current || !shouldPlayRef.current) return;
-      const timing = startTimingRef.current;
-      if (timing?.speakId === speakId) {
-        timing.id = started.id;
-        timing.readAt = Date.now();
-        timing.cached = started.ready;
-      }
+      const playId = `${Date.now()}-${speakId}`;
+      playIdRef.current = playId;
+      // The saved file at once, or the server starts reading the story in the narrator's voice.
+      const started = await readStory(storyText(story), language, voice.id, playId);
+      if (!isCurrent() || started.kind === 'cancelled') return;
 
-      // Not saved yet: play it live at once, chunk by chunk as it is generated. A live stream
-      // can't start mid-story, so a half-heard story starts over instead of waiting for the
-      // whole story (once saved, resume plays from the saved position).
-      if (!started.ready) {
-        if (resumeAt > 1) showToast('Starting from the beginning: this story is still being prepared.');
-        streamRef.current = {
-          id: started.id,
-          streamUrl: started.streamUrl,
-          audioUrl: started.audioUrl,
-          done: false,
-          story,
-          voiceId: voice.id,
-          language,
-        };
-        setStreamingId(started.id);
-        startClonedPlayback(started.streamUrl, started.estimatedDuration, 0);
-        return;
+      // One continuous file only: wait until the whole story is read, then play it.
+      if (started.kind === 'pending') {
+        for (;;) {
+          const result = await waitStoryAudio(started.key);
+          if (!isCurrent()) return;
+          if (result.status === 'ready') break;
+          if (result.status === 'failed') throw new Error(result.detail);
+        }
       }
+      if (playIdRef.current === playId) playIdRef.current = '';
 
-      saveClonedAudio(story, voice.id, language, started);
-      startClonedPlayback(started.audioUrl, started.duration, resumeAt);
+      // Only now: the server makes the next story's prefetch before this story's own chunks.
+      prepareAhead(story);
+      // The length is known once the player loads the file; until then the saved or estimated one.
+      const known = story.clonedVoiceId === voice.id && story.duration ? story.duration : 0;
+      pendingSaveRef.current = { story, audioUrl: started.audioUrl, voiceId: voice.id, language };
+      startClonedPlayback(started.audioUrl, known || estimateDuration(storyText(story)), resumeAt);
     } catch (error) {
       if (speakId !== speakIdRef.current) return;
       const message = error instanceof Error ? error.message : 'Voice clone failed';
@@ -394,7 +342,8 @@ export const useStoryPlayer = ({
     storyRef.current = story;
     stopSpeech();
     safePause();
-    clearStream();
+    cancelServerRead();
+    pendingSaveRef.current = null;
 
     const narrator = resolveNarrator();
     if (!narrator) {
@@ -424,7 +373,6 @@ export const useStoryPlayer = ({
       return;
     }
 
-    startTimingRef.current = { speakId, tapAt: Date.now(), id: '', readAt: 0, playerAt: 0, cached: false };
     setSource('preparing');
     setTime(0);
     void playClonedAudio(story, narrator, time, speakId);
@@ -443,6 +391,7 @@ export const useStoryPlayer = ({
     }
     if (autoPlay && blockedBySleepMode()) return;
 
+    cancelEndHold();
     endingRef.current = false;
     const estimated = estimateDuration(story.script || story.title);
     setAudioDuration(story.duration || estimated);
@@ -469,11 +418,11 @@ export const useStoryPlayer = ({
     shouldPlayRef.current = true;
     setIsPlaying(true);
     speakRemaining(story, startTime);
-    prepareAhead(story, defaultNarratorIdRef.current);
   };
 
   const togglePlayPause = async () => {
     if (!activeStory || playbackSourceRef.current === 'preparing') return;
+    cancelEndHold();
 
     // Ref, not state: lock-screen / notification commands can arrive before a re-render.
     if (shouldPlayRef.current) {
@@ -494,10 +443,6 @@ export const useStoryPlayer = ({
 
     if (playbackSourceRef.current === 'server') {
       const ended = currentTimeRef.current >= durationRef.current - 0.25;
-      if (ended && streamRef.current) {
-        seekTo(0);
-        return;
-      }
       if (ended) {
         setTime(0);
         try {
@@ -527,24 +472,10 @@ export const useStoryPlayer = ({
 
   const seekTo = (time: number) => {
     if (!activeStory || playbackSourceRef.current === 'preparing') return;
+    cancelEndHold();
 
     const nextTime = Math.max(0, Math.min(time, storyDuration(activeStory)));
-    const stream = playbackSourceRef.current === 'server' ? streamRef.current : null;
-    if (stream && !stream.done && nextTime > 0.5) {
-      showToast('Seeking will work when the voice is ready');
-      return;
-    }
     setTime(nextTime);
-
-    if (stream) {
-      // A live stream can't seek: back to 0 replays it from the start; once the story is saved
-      // that file takes over (one track, exact duration) and seeks normally from then on.
-      shouldPlayRef.current = true;
-      setIsPlaying(true);
-      if (stream.done) clearStream();
-      startClonedPlayback(stream.done ? stream.audioUrl : stream.streamUrl, durationRef.current, nextTime);
-      return;
-    }
 
     if (playbackSourceRef.current === 'server') {
       void player.seekTo(nextTime);
@@ -597,15 +528,12 @@ export const useStoryPlayer = ({
 
   const playPreviousStory = (openPlayer = true) => {
     if (!activeStory || stories.length === 0 || blockedBySleepMode()) return;
+    cancelEndHold();
 
     if (currentTimeRef.current > 3 && playbackSourceRef.current !== 'preparing') {
       shouldPlayRef.current = true;
       setIsPlaying(true);
       setTime(0);
-      if (playbackSourceRef.current === 'server' && streamRef.current) {
-        seekTo(0);
-        return;
-      }
       if (playbackSourceRef.current === 'server') {
         void player.seekTo(0);
         safePlay();
@@ -621,6 +549,7 @@ export const useStoryPlayer = ({
 
   const restartSpeech = (story: Story) => {
     if (blockedBySleepMode()) return;
+    cancelEndHold();
     endingRef.current = false;
     hasStartedRef.current = false;
     setActiveStory(story);
@@ -648,6 +577,7 @@ export const useStoryPlayer = ({
 
   /** Pause from any state (also while a cloned voice is preparing); Play resumes as usual. */
   const pausePlayback = () => {
+    cancelEndHold();
     speakIdRef.current += 1; // cancels pending TTS / clone callbacks
     shouldPlayRef.current = false;
     setIsPlaying(false);
@@ -656,7 +586,10 @@ export const useStoryPlayer = ({
       return;
     }
     stopSpeech();
-    if (playbackSourceRef.current === 'preparing') setSource('idle');
+    if (playbackSourceRef.current === 'preparing') {
+      cancelServerRead();
+      setSource('idle');
+    }
   };
 
   const sleep = useSleepMode({ isPlaying, currentTime, onSleep: pausePlayback });
@@ -664,7 +597,7 @@ export const useStoryPlayer = ({
   /** Inside the sleep window stories don't start; tells the user why. */
   const blockedBySleepMode = () => {
     if (!sleep.isSleepTimeNow()) return false;
-    showToast(`Sleep mode is on until ${sleep.sleepUntilLabel()}`);
+    showSleepToast(`Sleep mode is on until ${sleep.sleepUntilLabel()}`);
     return true;
   };
 
@@ -679,24 +612,37 @@ export const useStoryPlayer = ({
       endingRef.current = true;
       setTime(durationRef.current);
 
-      // Sleep mode: no repeat / auto-next inside the sleep window, fall through to the stop below.
-      const sleepNow = sleep.isSleepTimeNow();
+      const finish = () => {
+        endHoldRef.current = null;
+        // Sleep mode: no repeat / auto-next inside the sleep window (checked when the hold ends,
+        // it may have started during it), fall through to the stop below.
+        const sleepNow = sleep.isSleepTimeNow();
 
-      if (!sleepNow && shouldPlayRef.current && isRepeatRef.current && storyRef.current) {
-        const story = storyRef.current;
-        setTime(0);
+        if (!sleepNow && shouldPlayRef.current && isRepeatRef.current && storyRef.current) {
+          const story = storyRef.current;
+          setTime(0);
+          endingRef.current = false;
+          restartSpeech(story);
+          return;
+        }
+
+        if (!sleepNow && shouldPlayRef.current && playNextStory(false)) return;
+        shouldPlayRef.current = false;
+        setIsPlaying(false);
+        safePause();
+        stopSpeech();
+        setSource('idle');
         endingRef.current = false;
-        restartSpeech(story);
+      };
+
+      // The end time above is drawn before repeat / auto-next resets it to 0 (in the same tick it
+      // never showed: the clock stopped one second short). In the background nobody sees the
+      // clock and JS timers can freeze, so the next story starts at once.
+      if (shouldPlayRef.current && AppState.currentState === 'active') {
+        endHoldRef.current = setTimeout(finish, END_HOLD_MS);
         return;
       }
-
-      if (!sleepNow && shouldPlayRef.current && playNextStory(false)) return;
-      shouldPlayRef.current = false;
-      setIsPlaying(false);
-      safePause();
-      stopSpeech();
-      setSource('idle');
-      endingRef.current = false;
+      finish();
     };
   });
 
@@ -713,22 +659,6 @@ export const useStoryPlayer = ({
   useEventListener(player, 'playbackStatusUpdate', (status: AudioStatus) => {
     setPlayerPlaying(status.playing);
     if (playbackSourceRef.current !== 'server') return;
-
-    // First sound of a cloned story: report tap -> sound once (the server logs the whole chain).
-    const timing = startTimingRef.current;
-    if (timing && status.playing && status.currentTime > 0) {
-      startTimingRef.current = null;
-      if (timing.speakId === speakIdRef.current && timing.id && timing.playerAt) {
-        const firstSoundMs = Date.now() - timing.tapAt;
-        if (__DEV__) console.log(`[timing] tap -> first sound ${firstSoundMs} ms (cached=${timing.cached})`);
-        reportStoryTiming(timing.id, {
-          readResponseMs: timing.readAt - timing.tapAt,
-          playerStartMs: timing.playerAt - timing.tapAt,
-          firstSoundMs,
-          cached: timing.cached,
-        });
-      }
-    }
 
     // A new track starts (and seeks to its resume point) once it reports loaded.
     if (awaitingPlayRef.current) {
@@ -750,83 +680,26 @@ export const useStoryPlayer = ({
     // Ignore the previous track's finished status until the new one has started
     // (its end time and didJustFinish would otherwise end the new track at once).
     if (status.didJustFinish && !hasStartedRef.current) return;
-    const stream = streamRef.current;
     if (typeof status.currentTime === 'number') {
-      // A saved live story's time stops at its exact length (the player runs on in silence).
-      const time =
-        stream?.duration !== undefined ? Math.min(status.currentTime, stream.duration) : status.currentTime;
-      setTime(time);
-      if (time > 0.15) hasStartedRef.current = true;
-      // Still being read: the estimated length grows ahead of the time instead of being passed.
-      if (stream && stream.duration === undefined && time > durationRef.current - 1) {
-        setAudioDuration(time + LIVE_DURATION_HEADROOM_S);
-      }
+      setTime(status.currentTime);
+      if (status.currentTime > 0.15) hasStartedRef.current = true;
     }
-    // Not at the end of a saved live story, where the player always waits for more audio.
-    const atLiveEnd = stream?.duration !== undefined && currentTimeRef.current >= stream.duration - 1;
-    if (__DEV__ && stream && hasStartedRef.current && shouldPlayRef.current && !atLiveEnd) {
-      if (status.isBuffering && !stallAtRef.current) {
-        stallAtRef.current = Date.now();
-        console.log(`[timing] live stream stalled at ${currentTimeRef.current.toFixed(1)}s`);
-      } else if (!status.isBuffering && stallAtRef.current) {
-        console.log(`[timing] live stream resumed after ${Date.now() - stallAtRef.current} ms`);
-        stallAtRef.current = 0;
-      }
-    }
-    // A live stream has no usable duration: keep the estimate until the server reports it.
-    if (typeof status.duration === 'number' && status.duration > 0 && !stream) {
+    // The server reports no length: the player's is the real one, saved with the story once.
+    if (typeof status.duration === 'number' && status.duration > 0) {
       setAudioDuration(status.duration);
+      const save = pendingSaveRef.current;
+      if (save) {
+        pendingSaveRef.current = null;
+        saveClonedAudio(save, status.duration);
+      }
     }
 
-    // The player never reports the end of a live story (see StoryStream.duration): its end is
-    // the saved length, or a stall just before it.
-    const liveEnded =
-      stream?.duration !== undefined &&
-      hasStartedRef.current &&
-      (currentTimeRef.current >= stream.duration - LIVE_END_TOLERANCE_S ||
-        (status.isBuffering === true && currentTimeRef.current >= stream.duration - 1));
-    if (status.didJustFinish || liveEnded) {
+    if (status.didJustFinish) {
       hasStartedRef.current = false;
       onStoryEndedRef.current();
     }
   });
 
-  // Live stream: poll until the story is saved, then switch to its exact duration.
-  useEffect(() => {
-    if (!streamingId) return;
-    let cancelled = false;
-    const check = async () => {
-      const stream = streamRef.current;
-      if (!stream || stream.id !== streamingId || stream.done) return;
-      try {
-        const result = await fetchStoryStatus(stream.id);
-        if (cancelled || streamRef.current !== stream || !result.done) return;
-        stream.done = true;
-        if (result.error === null) {
-          stream.audioUrl = result.audioUrl;
-          stream.duration = result.duration;
-          setAudioDuration(result.duration);
-          saveClonedAudio(stream.story, stream.voiceId, stream.language, result);
-          return;
-        }
-        // The story broke off midway: carry on in System Voice from here.
-        showToast(result.error, 'error');
-        if (!shouldPlayRef.current || storyRef.current?.id !== stream.story.id) return;
-        const speakId = ++speakIdRef.current;
-        safePause();
-        clearStream();
-        setAudioDuration(estimateDuration(storyText(stream.story)));
-        speakWithDevice(stream.story, currentTimeRef.current, speakId);
-      } catch {
-        // PC briefly unreachable: try again on the next tick.
-      }
-    };
-    const interval = setInterval(() => void check(), STATUS_POLL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [streamingId]);
 
   // iOS native media card: stays up while the next story is prepared after a server track,
   // so auto-next / previous update it in place instead of dropping it. Android: see below.
@@ -965,7 +838,6 @@ export const useStoryPlayer = ({
       // Same narrator picked again while it already plays / starts: keep going.
       if (!changed && playbackSourceRef.current !== 'idle' && shouldPlayRef.current) return;
       restartSpeech(story);
-      prepareAhead(story, voiceId);
       return;
     }
     if (!changed || playbackSourceRef.current === 'idle') return;

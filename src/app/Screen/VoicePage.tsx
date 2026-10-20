@@ -17,7 +17,6 @@ interface VoiceCardProps {
   onSetDefault: (voiceId: string) => void;
   onPreviewVoice: (voice: Voice) => void;
   onDeleteVoice: (voiceId: string) => void;
-  onRetryVoice: (voiceId: string) => void;
 }
 
 /** Ready only once the voice is cloned and loaded on the GPU, not when the recording is saved. */
@@ -34,7 +33,6 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
   onSetDefault,
   onPreviewVoice,
   onDeleteVoice,
-  onRetryVoice,
 }) => {
   const styles = useThemedStyles(makeStyles);
   const failed = voice.state === 'error';
@@ -72,15 +70,8 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
         <Text style={styles.playIcon}>▶</Text>
         <Text style={styles.actionText}>Preview</Text>
       </Pressable>
-      {failed ? (
-        <Pressable
-          style={styles.actionButton}
-          onPress={() => onRetryVoice(voice.id)}
-          accessibilityRole="button"
-          accessibilityLabel={`Prepare ${voice.name}'s voice again`}>
-          <Text style={styles.actionText}>Retry</Text>
-        </Pressable>
-      ) : (
+      {/* A failed voice can only be deleted and recorded again (the server has no retry). */}
+      {!failed && (
         <Pressable
           style={styles.actionButton}
           onPress={() => onSetDefault(voice.id)}
@@ -104,11 +95,12 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
 export const FamilyVoicesScreen: React.FC = () => {
   const {
     voices,
+    voicesStatus,
+    refreshVoices,
     defaultNarratorId,
     setDefaultVoice,
     setCurrentScreen,
     deleteVoice,
-    retryVoice,
     narratorPickerStoryId,
     selectNarrator,
   } = useApp();
@@ -170,24 +162,23 @@ export const FamilyVoicesScreen: React.FC = () => {
     setPendingDeleteId(voiceId);
   };
 
-  const handleRetryVoice = (voiceId: string) => {
-    retryVoice(voiceId)
-      .then(() => showToast('Preparing voice again…', 'success'))
-      .catch((error: unknown) =>
-        showToast(error instanceof Error ? error.message : 'Could not prepare the voice', 'error'),
-      );
-  };
-
   const handleCancelDelete = () => {
     setPendingDeleteId(null);
   };
 
   const handleConfirmDelete = () => {
     const voice = voices.find((item) => item.id === pendingDeleteId);
-    if (previewUri && voice?.audioUri === previewUri) setPreviewUri(null);
-    showToast(`${voice?.name ?? 'Voice'} deleted..`, 'success');
-    if (pendingDeleteId) void deleteVoice(pendingDeleteId);
     setPendingDeleteId(null);
+    if (!pendingDeleteId) return;
+    // The toast follows the server's answer: the voice is only gone once the server deleted it.
+    deleteVoice(pendingDeleteId)
+      .then(() => {
+        if (previewUri && voice?.audioUri === previewUri) setPreviewUri(null);
+        showToast(`${voice?.name ?? 'Voice'} deleted successfully`, 'success');
+      })
+      .catch((error) =>
+        showToast(error instanceof Error ? error.message : 'Could not delete the voice', 'error'),
+      );
   };
 
   return (
@@ -280,9 +271,30 @@ export const FamilyVoicesScreen: React.FC = () => {
             onSetDefault={handleSetDefault}
             onPreviewVoice={handlePreviewVoice}
             onDeleteVoice={handleDeleteVoice}
-            onRetryVoice={handleRetryVoice}
           />
         ))}
+
+        {voices.length === 0 && (
+          <View style={styles.voiceCard}>
+            {voicesStatus === 'offline' ? (
+              <>
+                <Text style={styles.voiceName}>Server not connected</Text>
+                <Text style={styles.metaText}>Your family voices will appear once it's back.</Text>
+                <Pressable
+                  style={[styles.actionButton, styles.emptyRetry]}
+                  onPress={() => void refreshVoices()}
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry loading voices">
+                  <Text style={styles.actionText}>Retry</Text>
+                </Pressable>
+              </>
+            ) : (
+              <Text style={styles.metaText}>
+                {voicesStatus === 'loading' ? 'Loading voices…' : 'No voices yet. Tap + to record one.'}
+              </Text>
+            )}
+          </View>
+        )}
 
         <Pressable
           style={styles.addVoiceButton}
@@ -414,6 +426,7 @@ const makeStyles = (colors: ThemeColors) => ({
   },
   playIcon: { color: colors.textDark, fontSize: 13 },
   actionText: { ...theme.typography.section, color: colors.textDark },
+  emptyRetry: { flex: 0, marginTop: 14 },
   addVoiceButton: {
     minHeight: 52,
     borderRadius: 15,

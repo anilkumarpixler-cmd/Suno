@@ -1,13 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as SystemUI from 'expo-system-ui';
 import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppProvider, useApp } from '@/Context/AppContext';
-import { BottomNavigation } from '@/components/Common/BottomNavigation';
+import { BottomNavigation, bottomNavigationHeight } from '@/components/Common/BottomNavigation';
 import { MiniPlayerBar } from '@/components/Common/MiniPlayerBar';
-import { Toast } from '@/components/Common/Toast';
+import { setBottomToastOffset, Toast } from '@/components/Common/Toast';
 import { ThemeProvider, useAppTheme } from '@/Theme/ThemeProvider';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { RootScreen } from '@/Types';
@@ -28,6 +29,19 @@ function AppNavigator() {
   useNotificationPermission();
   const activeScreen = tabRoutes[pathname] ?? currentScreen;
   const showBottomNavigation = pathname in tabRoutes && pathname !== '/create';
+  const insets = useSafeAreaInsets();
+  // Only on the tab screens and the recording page (Add Voice); not on Now Playing or the
+  // settings sub-screens (Favorites, Sleep timer, Appearance).
+  const showMiniPlayer = showBottomNavigation || pathname === '/Screen/AddVoicePage';
+  // Measured: 0 while no story is active (the bar renders nothing).
+  const [miniPlayerHeight, setMiniPlayerHeight] = useState(0);
+
+  // Bottom toasts sit just above the mini player, else above the tab bar / the phone's nav bar.
+  const bottomBase = showBottomNavigation ? bottomNavigationHeight(insets.bottom) : insets.bottom;
+  const toastOffset = bottomBase + (showMiniPlayer ? miniPlayerHeight : 0) + 8;
+  useEffect(() => {
+    setBottomToastOffset(toastOffset);
+  }, [toastOffset]);
 
   useEffect(() => {
     void SystemUI.setBackgroundColorAsync(colors.background);
@@ -54,9 +68,12 @@ function AppNavigator() {
           <Stack.Screen name="Screen/SleepTimerPage" />
           <Stack.Screen name="Screen/AppearancePage" />
         </Stack>
-        {/* Floats over the screen: the content shows around the rounded card. */}
-        {pathname !== '/Screen/NowPlay' && (
-          <View style={styles.miniPlayer}>
+        {/* Floats over the screen: the content shows around the rounded card. Above the tab bar
+            on tab screens; elsewhere above the phone's nav bar. */}
+        {showMiniPlayer && (
+          <View
+            style={[styles.miniPlayer, !showBottomNavigation && { bottom: insets.bottom }]}
+            onLayout={(event) => setMiniPlayerHeight(Math.round(event.nativeEvent.layout.height))}>
             <MiniPlayerBar />
           </View>
         )}

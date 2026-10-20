@@ -11,6 +11,8 @@ type StoryCardProps = {
   variant?: 'default' | 'continue';
   onPress: () => void;
   onRemove?: () => void;
+  /** Screen-reader label of the top-right ✕ (remove from Favorites, or delete on Home). */
+  removeLabel?: string;
 };
 
 export const StoryCard: React.FC<StoryCardProps> = ({
@@ -19,6 +21,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({
   variant = 'default',
   onPress,
   onRemove,
+  removeLabel,
 }) => {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useAppTheme();
@@ -60,7 +63,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({
           style={styles.removeBtn}
           onPress={onRemove}
           accessibilityRole="button"
-          accessibilityLabel={`Remove ${story.title} from favorites`}>
+          accessibilityLabel={removeLabel ?? `Remove ${story.title} from favorites`}>
           <MaterialIcons name="close" size={18} color={colors.textMuted} />
         </TouchableOpacity>
       ) : null}

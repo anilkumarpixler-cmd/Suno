@@ -71,7 +71,12 @@ export const CustomDropdown: React.FC<CustomDropdownProps> = ({
         </Pressable>
       </View>
 
-      <Modal visible={isOpen} transparent animationType="fade" onRequestClose={onToggle}>
+      <Modal
+        visible={isOpen}
+        transparent
+        animationType="fade"
+        supportedOrientations={['portrait', 'landscape']}
+        onRequestClose={onToggle}>
         <View style={styles.modalRoot} pointerEvents="box-none">
           <Pressable style={StyleSheet.absoluteFill} onPress={onToggle} />
           {anchor ? (

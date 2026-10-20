@@ -4,17 +4,34 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '@/Context/AppContext';
 import { Header } from '@/components/Common/header';
 import { StoryCard } from '@/components/Common/Home/StoryCart';
-import { Category } from '@/Types';
+import { showToast } from '@/components/Common/Toast';
+import { ConfirmModal } from '@/modal/confirmModal';
+import { Category, Story } from '@/Types';
 import { borderRadius, spacing, theme, ThemeColors } from '@/Theme/Index';
 import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export const HomeScreen: React.FC = () => {
-  const { child, stories, defaultNarrator, playStory, setCurrentScreen, lastPlayedStoryId } =
-    useApp();
+  const {
+    child,
+    stories,
+    defaultNarrator,
+    playStory,
+    setCurrentScreen,
+    lastPlayedStoryId,
+    deleteStory,
+  } = useApp();
   const { gradients } = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const [selectedCategory, setSelectedCategory] = useState<Category>('All');
+  const [pendingDelete, setPendingDelete] = useState<Story | null>(null);
+
+  const handleConfirmDelete = () => {
+    if (!pendingDelete) return;
+    deleteStory(pendingDelete.id);
+    setPendingDelete(null);
+    showToast('Story deleted', 'success');
+  };
 
   const categories: { label: Category; icon?: string }[] = [
     { label: 'All' },
@@ -98,6 +115,8 @@ export const HomeScreen: React.FC = () => {
                   variant="continue"
                   narrator={defaultNarrator}
                   onPress={() => playStory(continueStory, true)}
+                  onRemove={() => setPendingDelete(continueStory)}
+                  removeLabel={`Delete ${continueStory.title}`}
                 />
               </View>
             )}
@@ -110,8 +129,17 @@ export const HomeScreen: React.FC = () => {
             story={story}
             narrator={defaultNarrator}
             onPress={() => playStory(story, true)}
+            onRemove={() => setPendingDelete(story)}
+            removeLabel={`Delete ${story.title}`}
           />
         )}
+      />
+      <ConfirmModal
+        visible={pendingDelete !== null}
+        title="Delete story"
+        message={`Remove "${pendingDelete?.title ?? 'this story'}"? This cannot be undone.`}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={handleConfirmDelete}
       />
     </SafeAreaView>
   );

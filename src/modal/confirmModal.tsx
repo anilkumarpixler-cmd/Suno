@@ -23,7 +23,12 @@ export const ConfirmModal = ({
 }: ConfirmModalProps) => {
   const styles = useThemedStyles(makeStyles);
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      supportedOrientations={['portrait', 'landscape']}
+      onRequestClose={onCancel}>
       <Pressable style={styles.modalOverlay} onPress={onCancel}>
         <Pressable style={styles.confirmCard} onPress={(event) => event.stopPropagation()}>
           <Text style={styles.confirmTitle}>{title}</Text>

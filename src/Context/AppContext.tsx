@@ -1,24 +1,35 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { router, usePathname } from 'expo-router';
 import { Child, CreateStoryInput, RootScreen, Story, Voice } from '../Types';
-import { initialChild, initialStories, initialVoices } from '../Data/mockData';
+import { initialChild, initialStories } from '../Data/mockData';
 import { useStoryPlayer } from '../hooks/useStoryPlayer';
 import { SleepModeSettings } from '../services/sleepMode';
 import { estimateDuration, normalizeStory } from '../services/storySpeech';
 import {
   deleteVoiceOnServer,
   fetchVoices,
-  reenrollVoice,
   setDefaultVoiceOnServer,
   uploadVoice,
 } from '../services/sunoApi';
-import { getStories, saveStory, updateStory } from '../storage';
+import {
+  deleteStory as deleteSavedStory,
+  getDeletedStoryIds,
+  getStories,
+  markStoryDeleted,
+  saveStory,
+  updateStory,
+} from '../storage';
 
 type AppContextType = {
   currentScreen: RootScreen;
   setCurrentScreen: (screen: RootScreen) => void;
   child: Child;
   voices: Voice[];
+  /** Voice list from the server: still loading, loaded, or the server couldn't be reached. */
+  voicesStatus: VoicesStatus;
+  /** Loads the voice list again (Retry). */
+  refreshVoices: () => Promise<void>;
   stories: Story[];
   activeStory: Story | null;
   lastPlayedStoryId: string | null;
@@ -47,15 +58,17 @@ type AppContextType = {
   setDefaultVoice: (voiceId: string) => void;
   addVoice: (name: string, languages: string[], audioUri?: string) => Promise<void>;
   deleteVoice: (voiceId: string) => Promise<void>;
-  /** Clones a narrator again from its recording after its enroll failed. */
-  retryVoice: (voiceId: string) => Promise<void>;
   toggleFavorite: (storyId: string) => void;
+  /** Removes the story for good (built-in ones too); stops it first if it is playing. */
+  deleteStory: (storyId: string) => void;
   /** Now Playing picker: makes the voice the default and replays the current story in it. */
   selectNarrator: (voiceId: string) => void;
   narratorPickerStoryId: string | null;
   openNarratorPicker: (storyId: string) => void;
   createNewStory: (input: CreateStoryInput) => Promise<void>;
 };
+
+export type VoicesStatus = 'loading' | 'ready' | 'offline';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -77,7 +90,9 @@ const screenRoutes: Record<RootScreen, string> = {
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentScreen, setCurrentScreenState] = useState<RootScreen>('Home');
   const [child] = useState<Child>(initialChild);
-  const [voices, setVoices] = useState<Voice[]>(initialVoices);
+  // Only the server's real voices: no demo voices, also not while loading or offline.
+  const [voices, setVoices] = useState<Voice[]>([]);
+  const [voicesStatus, setVoicesStatus] = useState<VoicesStatus>('loading');
   const [stories, setStories] = useState<Story[]>(initialStories);
   const [lastPlayedStoryId, setLastPlayedStoryId] = useState<string | null>(
     initialStories.find((story) => story.progress > 0)?.id ?? null
@@ -156,13 +171,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     let isMounted = true;
 
-    getStories().then((savedStories) => {
-      if (!isMounted || savedStories.length === 0) return;
+    Promise.all([getStories(), getDeletedStoryIds()]).then(([savedStories, deletedIds]) => {
+      if (!isMounted || (savedStories.length === 0 && deletedIds.length === 0)) return;
+      const deleted = new Set(deletedIds);
       setStories((currentStories) => {
-        const normalized = savedStories.map((story) => normalizeStory(story));
+        const normalized = savedStories
+          .filter((story) => !deleted.has(story.id))
+          .map((story) => normalizeStory(story));
         const savedIds = new Set(normalized.map((story) => story.id));
-        return [...normalized, ...currentStories.filter((story) => !savedIds.has(story.id))];
+        return [
+          ...normalized,
+          ...currentStories.filter((story) => !savedIds.has(story.id) && !deleted.has(story.id)),
+        ];
       });
+      setLastPlayedStoryId((id) => (id && deleted.has(id) ? null : id));
     });
 
     return () => {
@@ -170,21 +192,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
+  // The server's list is the truth, even when empty. Offline keeps what is shown (nothing on the
+  // first load) and tries again on app foreground, on opening Voices, or on Retry.
+  const refreshingVoicesRef = useRef(false);
+  const refreshVoices = async () => {
+    if (refreshingVoicesRef.current) return;
+    refreshingVoicesRef.current = true;
+    try {
+      setVoices(await fetchVoices());
+      setVoicesStatus('ready');
+    } catch {
+      setVoicesStatus('offline');
+    } finally {
+      refreshingVoicesRef.current = false;
+    }
+  };
+
   useEffect(() => {
-    let isMounted = true;
-
-    fetchVoices()
-      .then((remote) => {
-        if (isMounted && remote.length > 0) setVoices(remote);
-      })
-      .catch(() => {
-        if (isMounted) setVoices(initialVoices);
-      });
-
-    return () => {
-      isMounted = false;
-    };
+    void refreshVoices();
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refreshVoices();
+    });
+    return () => subscription.remove();
   }, []);
+
+  useEffect(() => {
+    if (currentScreen === 'Voices') void refreshVoices();
+  }, [currentScreen]);
 
   // A narrator is being cloned on the server: refresh until it is ready (or failed).
   const voicesPreparing = voices.some(
@@ -194,9 +228,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!voicesPreparing) return;
     const interval = setInterval(() => {
       fetchVoices()
-        .then((remote) => {
-          if (remote.length > 0) setVoices(remote);
-        })
+        .then((remote) => setVoices(remote))
         .catch(() => undefined);
     }, VOICE_POLL_MS);
     return () => clearInterval(interval);
@@ -249,11 +281,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setVoices((prev) => [...prev.filter((voice) => voice.id !== created.id), created]);
   };
 
-  const retryVoice = async (voiceId: string) => {
-    const updated = await reenrollVoice(voiceId);
-    setVoices((prev) => prev.map((voice) => (voice.id === voiceId ? updated : voice)));
-  };
-
   const deleteVoice = async (voiceId: string) => {
     await deleteVoiceOnServer(voiceId);
     setVoices((prev) => prev.filter((item) => item.id !== voiceId));
@@ -271,6 +298,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ? { ...currentStory, isFavorite: !currentStory.isFavorite }
         : currentStory
     );
+  };
+
+  const deleteStory = (storyId: string) => {
+    if (activeStory?.id === storyId) {
+      pausePlayback();
+      setActiveStory(null);
+    }
+    setStories((prev) => prev.filter((item) => item.id !== storyId));
+    setLastPlayedStoryId((id) => (id === storyId ? null : id));
+    void deleteSavedStory(storyId);
+    void markStoryDeleted(storyId);
   };
 
   const createNewStory = async (input: CreateStoryInput) => {
@@ -313,6 +351,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCurrentScreen: navigateToScreen,
         child,
         voices,
+        voicesStatus,
+        refreshVoices,
         stories,
         activeStory,
         lastPlayedStoryId,
@@ -338,8 +378,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setDefaultVoice,
         addVoice,
         deleteVoice,
-        retryVoice,
         toggleFavorite,
+        deleteStory,
         selectNarrator,
         narratorPickerStoryId,
         openNarratorPicker,
