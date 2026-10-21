@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Linking,
   Pressable,
   ScrollView,
   Text,
@@ -25,6 +26,8 @@ import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { deleteVoiceRecording } from '@/storage/voiceAudio';
 import {showToast} from '@/components/Common/Toast';
+import { claimMedia, releaseMedia } from '@/services/activeMedia';
+import { ConfirmModal } from '@/modal/confirmModal';
 const LANGUAGE_OPTIONS = ['Hindi + English', 'Hindi', 'English', 'Punjabi', 'Gujarati'];
 // Cloning reads the first ~10 s of clear speech: shorter clones badly, longer is never used.
 const MIN_RECORDING_SECONDS = 8;
@@ -69,6 +72,8 @@ export const AddVoiceScreen: React.FC = () => {
   const [isRecorded, setIsRecorded] = useState(false);
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
+  // Mic denied for good: themed pop-up (light / dark) with Open Settings.
+  const [micSettingsVisible, setMicSettingsVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   // Ref, not state: a second tap can arrive before the re-render that disables the button.
   const savingRef = useRef(false);
@@ -80,6 +85,11 @@ export const AddVoiceScreen: React.FC = () => {
   const recorderState = useAudioRecorderState(recorder);
   const player = useAudioPlayer(recordedUri ?? undefined);
   const isRecording = recorderState.isRecording;
+  // Stable: a story starting stops the preview / the recording (one sound at a time).
+  const stopPreviewRef = useRef<() => void>(() => undefined);
+  const stopPreviewForOtherMedia = useRef(() => stopPreviewRef.current()).current;
+  const stopRecordingRef = useRef<() => void>(() => undefined);
+  const stopRecordingForOtherMedia = useRef(() => stopRecordingRef.current()).current;
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | undefined;
@@ -108,11 +118,14 @@ export const AddVoiceScreen: React.FC = () => {
         // Recorder may already be released.
       }
       endRecordingAudio();
+      releaseMedia(stopPreviewForOtherMedia);
+      releaseMedia(stopRecordingForOtherMedia);
     },
     [],
   );
 
   const stopPreview = () => {
+    releaseMedia(stopPreviewForOtherMedia);
     try {
       player.pause();
       player.seekTo(0);
@@ -143,6 +156,11 @@ export const AddVoiceScreen: React.FC = () => {
     try {
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) {
+        // Denied for good ("Don't allow again"): the OS no longer shows the prompt, only Settings can turn it on.
+        if (!permission.canAskAgain) {
+          setMicSettingsVisible(true);
+          return;
+        }
         Alert.alert(
           'Microphone permission required',
           'Please allow microphone access to record your voice.',
@@ -157,6 +175,8 @@ export const AddVoiceScreen: React.FC = () => {
       await beginRecordingAudio();
       await recorder.prepareToRecordAsync();
       recorder.record();
+      // A story started from the mini player stops the recording instead of playing into it.
+      claimMedia(stopRecordingForOtherMedia);
     } catch {
       endRecordingAudio();
       Alert.alert('Recording error', 'Could not start recording. Please try again.');
@@ -167,6 +187,7 @@ export const AddVoiceScreen: React.FC = () => {
   };
 
   const handleStopRecording = async () => {
+    releaseMedia(stopRecordingForOtherMedia);
     try {
       await recorder.stop();
       const uri = recorder.uri;
@@ -180,6 +201,9 @@ export const AddVoiceScreen: React.FC = () => {
       endRecordingAudio();
     }
   };
+
+  stopPreviewRef.current = stopPreview;
+  stopRecordingRef.current = () => void handleStopRecording();
 
   const handleRetake = async () => {
     await handleStartRecording();
@@ -196,6 +220,7 @@ export const AddVoiceScreen: React.FC = () => {
       return;
     }
 
+    claimMedia(stopPreviewForOtherMedia);
     player.seekTo(0);
     player.play();
     setIsPreviewing(true);
@@ -354,6 +379,20 @@ export const AddVoiceScreen: React.FC = () => {
           </Text>
         </View>
       </ScrollView>
+
+      <ConfirmModal
+        visible={micSettingsVisible}
+        title="Microphone permission required"
+        message="Microphone access is turned off for Suno. Turn it on in Settings to record your voice."
+        cancelLabel="Not now"
+        confirmLabel="Open Settings"
+        confirmVariant="primary"
+        onCancel={() => setMicSettingsVisible(false)}
+        onConfirm={() => {
+          setMicSettingsVisible(false);
+          void Linking.openSettings();
+        }}
+      />
     </SafeAreaView>
   );
 };

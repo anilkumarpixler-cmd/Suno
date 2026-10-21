@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, View, Text } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { Voice } from '@/Types';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { ConfirmModal } from '@/modal/confirmModal';
 import { PreviewModal } from '@/modal/previewModal';
+import { claimMedia, releaseMedia } from '@/services/activeMedia';
 
 interface VoiceCardProps {
   voice: Voice;
@@ -113,7 +114,8 @@ export const FamilyVoicesScreen: React.FC = () => {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const player = useAudioPlayer(previewUri ?? undefined);
   const status = useAudioPlayerStatus(player);
-  const pendingVoice = voices.find((item) => item.id === pendingDeleteId);
+  // Kept after the pop-up closes, so its text doesn't flip to "this voice" while it fades out.
+  const [deleteName, setDeleteName] = useState('');
 
   useEffect(() => {
     if (previewUri) player.replace(previewUri);
@@ -147,18 +149,41 @@ export const FamilyVoicesScreen: React.FC = () => {
     setPreviewUri(voice.audioUri);
   };
 
+  // Stable: a story starting stops the preview (one sound at a time).
+  const stopPreviewRef = useRef<() => void>(() => undefined);
+  const stopPreviewForOtherMedia = useRef(() => stopPreviewRef.current()).current;
+  useEffect(() => () => releaseMedia(stopPreviewForOtherMedia), []);
+
   const handlePlayPreview = () => {
     if (!previewUri) return;
+    claimMedia(stopPreviewForOtherMedia);
     player.seekTo(0);
     player.play();
   };
 
   const handleStopPreview = () => {
+    releaseMedia(stopPreviewForOtherMedia);
     player.pause();
     player.seekTo(0);
   };
+  stopPreviewRef.current = handleStopPreview;
+
+  // Voices whose delete request is running: hidden from the list so Delete can't be sent twice.
+  // Ref for the guard (a second tap can arrive before the re-render), state for the list.
+  const deletingIdsRef = useRef<string[]>([]);
+  const [deletingIds, setDeletingIds] = useState<string[]>([]);
+
+  const setDeleting = (voiceId: string, deleting: boolean) => {
+    const next = deleting
+      ? [...deletingIdsRef.current, voiceId]
+      : deletingIdsRef.current.filter((id) => id !== voiceId);
+    deletingIdsRef.current = next;
+    setDeletingIds(next);
+  };
 
   const handleDeleteVoice = (voiceId: string) => {
+    if (deletingIdsRef.current.includes(voiceId)) return;
+    setDeleteName(voices.find((item) => item.id === voiceId)?.name ?? 'this voice');
     setPendingDeleteId(voiceId);
   };
 
@@ -167,19 +192,24 @@ export const FamilyVoicesScreen: React.FC = () => {
   };
 
   const handleConfirmDelete = () => {
-    const voice = voices.find((item) => item.id === pendingDeleteId);
+    const voiceId = pendingDeleteId;
+    const voice = voices.find((item) => item.id === voiceId);
     setPendingDeleteId(null);
-    if (!pendingDeleteId) return;
-    // The toast follows the server's answer: the voice is only gone once the server deleted it.
-    deleteVoice(pendingDeleteId)
+    if (!voiceId || deletingIdsRef.current.includes(voiceId)) return;
+    // Hidden at once; the toast follows the server's answer. A failed delete shows the card again.
+    setDeleting(voiceId, true);
+    deleteVoice(voiceId)
       .then(() => {
         if (previewUri && voice?.audioUri === previewUri) setPreviewUri(null);
         showToast(`${voice?.name ?? 'Voice'} deleted successfully`, 'success');
       })
       .catch((error) =>
         showToast(error instanceof Error ? error.message : 'Could not delete the voice', 'error'),
-      );
+      )
+      .finally(() => setDeleting(voiceId, false));
   };
+
+  const visibleVoices = voices.filter((voice) => !deletingIds.includes(voice.id));
 
   return (
     <SafeAreaView style={styles.container}>
@@ -231,39 +261,47 @@ export const FamilyVoicesScreen: React.FC = () => {
           <ConfirmModal
             visible={pendingDeleteId !== null}
             title="Delete voice"
-            message={`Remove ${pendingVoice?.name ?? 'this voice'}? This cannot be undone.`}
+            message={`Remove ${deleteName}? This cannot be undone.`}
             onCancel={handleCancelDelete}
             onConfirm={handleConfirmDelete}
           />
 
-        {isPicker && (
-          <Pressable
-            style={styles.voiceCard}
-            onPress={() => {
+        {/* Always first: the device voice is the default narrator until a family voice is chosen. */}
+        <Pressable
+          style={styles.voiceCard}
+          onPress={() => {
+            if (isPicker) {
               selectNarrator('');
               showToast('Using system voice', 'success');
               setCurrentScreen('NowPlaying');
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Use system voice">
-            <View style={styles.voiceTopRow}>
-              <View style={styles.avatarCircle}>
-                <Text style={styles.avatarEmoji}>🔊</Text>
-              </View>
-              <View style={styles.voiceDetails}>
-                <Text style={styles.voiceName}>System Voice</Text>
-                <Text style={styles.metaText}>Device speech · no cloning</Text>
-              </View>
-              {!selectedVoiceId && (
-                <View style={styles.defaultStatus} accessibilityLabel="System Voice selected">
-                  <Text style={styles.checkMark}>✓</Text>
-                </View>
-              )}
+              return;
+            }
+            if (!selectedVoiceId) return;
+            setDefaultVoice('');
+            showToast('System Voice is now your default narrator', 'success');
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Use system voice">
+          <View style={styles.voiceTopRow}>
+            <View style={styles.avatarCircle}>
+              <Text style={styles.avatarEmoji}>🔊</Text>
             </View>
-          </Pressable>
-        )}
+            <View style={styles.voiceDetails}>
+              <Text style={styles.voiceName}>System Voice</Text>
+              <Text style={styles.metaText}>Device speech · no cloning</Text>
+            </View>
+            {!selectedVoiceId && (
+              <View style={styles.defaultStatus} accessibilityLabel="System Voice selected">
+                <Text style={styles.checkMark}>✓</Text>
+              </View>
+            )}
+          </View>
+        </Pressable>
 
-        {(isPicker ? voices.filter((voice) => Boolean(voice.audioUri)) : voices).map((voice) => (
+        {(isPicker
+          ? visibleVoices.filter((voice) => Boolean(voice.audioUri))
+          : visibleVoices
+        ).map((voice) => (
           <VoiceCard
             key={voice.id}
             voice={voice}
@@ -274,7 +312,7 @@ export const FamilyVoicesScreen: React.FC = () => {
           />
         ))}
 
-        {voices.length === 0 && (
+        {visibleVoices.length === 0 && (
           <View style={styles.voiceCard}>
             {voicesStatus === 'offline' ? (
               <>

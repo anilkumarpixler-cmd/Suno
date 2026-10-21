@@ -31,12 +31,17 @@ export const WheelColumn: React.FC<WheelColumnProps> = ({
 }) => {
   const styles = useThemedStyles(makeStyles);
   const scrollRef = useRef<ScrollView>(null);
-  const initialIndexRef = useRef(selectedIndex);
+  // Latest value, not the one the picker opened with: a re-layout (rotation, split screen)
+  // scrolls back to it, and rapid scroll events don't report the same row twice.
+  const selectedIndexRef = useRef(selectedIndex);
+  selectedIndexRef.current = selectedIndex;
 
   const select = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const index = Math.round(event.nativeEvent.contentOffset.y / WHEEL_ITEM_HEIGHT);
     const clamped = Math.max(0, Math.min(index, items.length - 1));
-    if (clamped !== selectedIndex) onChange(clamped);
+    if (clamped === selectedIndexRef.current) return;
+    selectedIndexRef.current = clamped;
+    onChange(clamped);
   };
 
   return (
@@ -50,10 +55,13 @@ export const WheelColumn: React.FC<WheelColumnProps> = ({
       nestedScrollEnabled
       onLayout={() =>
         scrollRef.current?.scrollTo({
-          y: initialIndexRef.current * WHEEL_ITEM_HEIGHT,
+          y: selectedIndexRef.current * WHEEL_ITEM_HEIGHT,
           animated: false,
         })
       }
+      // Live while it spins: the bold row follows the wheel, and OK mid-spin saves the center row.
+      onScroll={select}
+      scrollEventThrottle={16}
       onMomentumScrollEnd={select}
       // Slow drags on Android may end without momentum.
       onScrollEndDrag={select}

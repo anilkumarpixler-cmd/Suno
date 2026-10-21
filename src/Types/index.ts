@@ -8,6 +8,7 @@ export type CreateStoryInput = {
   language: StoryLanguage;
   category: Category;
   narratorId: string;
+  childName: string;
 };
 
 export interface Child {
@@ -48,6 +49,8 @@ export interface Story {
   isFavorite?: boolean;
   script: string;
   language?: StoryLanguage;
+  /** From Create Story; missing on built-in and older stories (Search falls back to the title). */
+  childName?: string;
 }
 
 export interface PlayerState {
@@ -59,6 +62,7 @@ export interface PlayerState {
 
 export type RootScreen =
   | 'Home'
+  | 'Search'
   | 'Voices'
   | 'Create'
   | 'Profile'

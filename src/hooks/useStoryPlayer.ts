@@ -1,11 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEventListener } from 'expo';
-import { setAudioModeAsync, useAudioPlayer, type AudioMode, type AudioStatus } from 'expo-audio';
+import {
+  setAudioModeAsync,
+  setIsAudioActiveAsync,
+  useAudioPlayer,
+  type AudioMode,
+  type AudioStatus,
+} from 'expo-audio';
 import { useEffect, useRef, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { RootScreen, Story, Voice } from '../Types';
 import { cancelStoryPlay, prefetchStory, readStory, waitStoryAudio } from '../services/sunoApi';
 import { showToast } from '../components/Common/Toast';
+import { claimMedia, releaseMedia } from '../services/activeMedia';
 import type { DeviceMediaCommand } from '../../modules/suno-media-session';
 import { useDeviceMediaSession } from './useDeviceMediaSession';
 import { useLockScreenControls } from './useLockScreenControls';
@@ -117,6 +124,11 @@ export const useStoryPlayer = ({
   // The narrator story the server is reading right now (cancelled when no longer wanted).
   const playIdRef = useRef('');
   const pendingSaveRef = useRef<PendingSave | null>(null);
+  // Last play() / pause() from JS: statuses right after it may still show the old state.
+  const lastJsCommandAtRef = useRef(0);
+  const pausePlaybackRef = useRef<() => void>(() => undefined);
+  // Stable: another sound in Suno (voice preview, recording) starting pauses the story.
+  const stopStoryForOtherMedia = useRef(() => pausePlaybackRef.current()).current;
 
   useEffect(() => {
     void setAudioModeAsync(STORY_AUDIO_MODE).catch(() => undefined);
@@ -162,6 +174,7 @@ export const useStoryPlayer = ({
   const resolveLanguage = (story: Story) => story.language || 'English';
 
   const safePause = () => {
+    lastJsCommandAtRef.current = Date.now();
     try {
       player.pause();
     } catch {
@@ -170,6 +183,7 @@ export const useStoryPlayer = ({
   };
 
   const safePlay = () => {
+    lastJsCommandAtRef.current = Date.now();
     try {
       player.play();
     } catch {
@@ -227,6 +241,8 @@ export const useStoryPlayer = ({
     }
 
     boundarySeenRef.current = false;
+    // iOS: only player.play() activates the doNotMix session; without it other apps keep playing.
+    if (Platform.OS === 'ios') void setIsAudioActiveAsync(true).catch(() => undefined);
     speakText(remaining, {
       locale: languageToLocale(resolveLanguage(story)),
       pitch: 1,
@@ -277,6 +293,27 @@ export const useStoryPlayer = ({
     awaitingPlayRef.current = true;
     // replace() loads synchronously; the status listener below seeks and plays once loaded.
     player.replace(audioUrl);
+  };
+
+  /** The narrator file did not load or play (404, network): continue in System Voice. */
+  const handleTrackError = (message: string) => {
+    const resumeAt = awaitingPlayRef.current ? pendingStartRef.current : currentTimeRef.current;
+    awaitingPlayRef.current = false;
+    pendingStartRef.current = 0;
+    // A broken URL is never saved as the story's cloned audio.
+    pendingSaveRef.current = null;
+    hasStartedRef.current = false;
+    safePause();
+    const story = storyRef.current;
+    // Paused already: the next Play tries the narrator again.
+    if (!story || !shouldPlayRef.current) {
+      setSource('idle');
+      return;
+    }
+    if (__DEV__) console.warn('Narrator track failed:', message);
+    showToast('Narrator audio could not play. Playing in System Voice.', 'error');
+    setAudioDuration(estimateDuration(story.script || story.title));
+    speakWithDevice(story, resumeAt, speakIdRef.current);
   };
 
   /** Called with the player's real length of a narrator track (the server reports none). */
@@ -592,6 +629,14 @@ export const useStoryPlayer = ({
     }
   };
 
+  pausePlaybackRef.current = pausePlayback;
+
+  // One place for every way a story starts (Play, auto-next, repeat, card, headset).
+  useEffect(() => {
+    if (isPlaying) claimMedia(stopStoryForOtherMedia);
+    else releaseMedia(stopStoryForOtherMedia);
+  }, [isPlaying]);
+
   const sleep = useSleepMode({ isPlaying, currentTime, onSleep: pausePlayback });
 
   /** Inside the sleep window stories don't start; tells the user why. */
@@ -657,8 +702,33 @@ export const useStoryPlayer = ({
   // Player status is handled in the native event, not mirrored through effects: copying it into
   // state from effects on every 250 ms tick tripped React's nested-update limit at story end.
   useEventListener(player, 'playbackStatusUpdate', (status: AudioStatus) => {
+    // Android's error status carries only `error` (no playing / time / duration fields).
+    if (status.error) {
+      setPlayerPlaying(false);
+      if (playbackSourceRef.current === 'server') handleTrackError(status.error);
+      return;
+    }
     setPlayerPlaying(status.playing);
     if (playbackSourceRef.current !== 'server') return;
+
+    // Native pause / resume JS didn't ask for: another app took audio focus (or gave it back),
+    // or the iOS lock screen / a call. The buttons follow, and Play takes the focus back.
+    const settled = Date.now() - lastJsCommandAtRef.current > 1000;
+    if (
+      settled &&
+      status.isLoaded &&
+      !status.isBuffering &&
+      !status.didJustFinish &&
+      !awaitingPlayRef.current
+    ) {
+      if (!status.playing && shouldPlayRef.current && hasStartedRef.current) {
+        shouldPlayRef.current = false;
+        setIsPlaying(false);
+      } else if (status.playing && !shouldPlayRef.current) {
+        shouldPlayRef.current = true;
+        setIsPlaying(true);
+      }
+    }
 
     // A new track starts (and seeks to its resume point) once it reports loaded.
     if (awaitingPlayRef.current) {

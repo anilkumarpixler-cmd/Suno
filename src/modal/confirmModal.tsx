@@ -9,7 +9,10 @@ type ConfirmModalProps = {
   cancelLabel?: string;
   confirmLabel?: string;
   onCancel: () => void;
-  onConfirm: () => void;
+  // Without onConfirm the modal is a plain info pop-up with only the cancel button.
+  onConfirm?: () => void;
+  /** 'danger' (default, red) for deletes; 'primary' for a normal action such as Open Settings. */
+  confirmVariant?: 'danger' | 'primary';
 };
 
 export const ConfirmModal = ({
@@ -20,6 +23,7 @@ export const ConfirmModal = ({
   confirmLabel = 'Delete',
   onCancel,
   onConfirm,
+  confirmVariant = 'danger',
 }: ConfirmModalProps) => {
   const styles = useThemedStyles(makeStyles);
   return (
@@ -41,13 +45,15 @@ export const ConfirmModal = ({
               accessibilityLabel={cancelLabel}>
               <Text style={styles.confirmCancelText}>{cancelLabel}</Text>
             </Pressable>
-            <Pressable
-              style={styles.confirmDelete}
-              onPress={onConfirm}
-              accessibilityRole="button"
-              accessibilityLabel={confirmLabel}>
-              <Text style={styles.confirmDeleteText}>{confirmLabel}</Text>
-            </Pressable>
+            {onConfirm && (
+              <Pressable
+                style={[styles.confirmDelete, confirmVariant === 'primary' && styles.confirmPrimary]}
+                onPress={onConfirm}
+                accessibilityRole="button"
+                accessibilityLabel={confirmLabel}>
+                <Text style={styles.confirmDeleteText}>{confirmLabel}</Text>
+              </Pressable>
+            )}
           </View>
         </Pressable>
       </Pressable>
@@ -93,5 +99,6 @@ const makeStyles = (colors: ThemeColors) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
+  confirmPrimary: { backgroundColor: colors.primary },
   confirmDeleteText: { ...theme.typography.section, color: colors.onPrimary },
 });

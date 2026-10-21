@@ -28,6 +28,7 @@ export const BottomNavigation: React.FC<BottomNavProps> = ({ activeScreen, onSel
   const bottomGap = bottomGapFor(bottom);
   const tabs: { key: RootScreen; label: string; icon: string }[] = [
     { key: 'Home', label: 'Home', icon: '🏠' },
+    { key: 'Search', label: 'Search', icon: '🔍' },
     { key: 'Voices', label: 'Voices', icon: '🎙️' },
     { key: 'Create', label: 'Create', icon: '✨' },
     { key: 'Profile', label: 'Profile', icon: '👤' },

@@ -11,12 +11,14 @@ import { MiniPlayerBar } from '@/components/Common/MiniPlayerBar';
 import { setBottomToastOffset, Toast } from '@/components/Common/Toast';
 import { ThemeProvider, useAppTheme } from '@/Theme/ThemeProvider';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
+import { ConfirmModal } from '@/modal/confirmModal';
 import { RootScreen } from '@/Types';
 
 void SplashScreen.preventAutoHideAsync();
 
 const tabRoutes: Record<string, RootScreen> = {
   '/': 'Home',
+  '/Screen/SearchPage': 'Search',
   '/Screen/VoicePage': 'Voices',
   '/Screen/CreateStoryPage': 'Create',
   '/Screen/ProfilePage': 'Profile',
@@ -26,7 +28,7 @@ function AppNavigator() {
   const pathname = usePathname();
   const { currentScreen, setCurrentScreen } = useApp();
   const { scheme, colors } = useAppTheme();
-  useNotificationPermission();
+  const notification = useNotificationPermission();
   const activeScreen = tabRoutes[pathname] ?? currentScreen;
   const showBottomNavigation = pathname in tabRoutes && pathname !== '/create';
   const insets = useSafeAreaInsets();
@@ -59,6 +61,7 @@ function AppNavigator() {
             animationDuration: 200,
           }}>
           <Stack.Screen name="index" />
+          <Stack.Screen name="Screen/SearchPage" />
           <Stack.Screen name="Screen/VoicePage" />
           <Stack.Screen name="Screen/CreateStoryPage" />
           <Stack.Screen name="Screen/ProfilePage" />
@@ -82,6 +85,17 @@ function AppNavigator() {
         <BottomNavigation activeScreen={activeScreen} onSelectTab={setCurrentScreen} />
       )}
       <Toast />
+      {/* After a permanent deny only; themed (light / dark). The permission dialog itself is Android's. */}
+      <ConfirmModal
+        visible={notification.prompt === 'settings'}
+        title="Notifications are off"
+        message="To see story controls on the lock screen and notification panel, turn on notifications in Settings."
+        cancelLabel="Not now"
+        confirmLabel="Open Settings"
+        confirmVariant="primary"
+        onCancel={notification.dismiss}
+        onConfirm={notification.openSettings}
+      />
     </>
   );
 }

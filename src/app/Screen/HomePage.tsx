@@ -25,6 +25,13 @@ export const HomeScreen: React.FC = () => {
   const styles = useThemedStyles(makeStyles);
   const [selectedCategory, setSelectedCategory] = useState<Category>('All');
   const [pendingDelete, setPendingDelete] = useState<Story | null>(null);
+  // Kept after the pop-up closes, so its text doesn't flip to "this story" while it fades out.
+  const [deleteTitle, setDeleteTitle] = useState('');
+
+  const openDelete = (story: Story) => {
+    setDeleteTitle(story.title);
+    setPendingDelete(story);
+  };
 
   const handleConfirmDelete = () => {
     if (!pendingDelete) return;
@@ -115,7 +122,7 @@ export const HomeScreen: React.FC = () => {
                   variant="continue"
                   narrator={defaultNarrator}
                   onPress={() => playStory(continueStory, true)}
-                  onRemove={() => setPendingDelete(continueStory)}
+                  onRemove={() => openDelete(continueStory)}
                   removeLabel={`Delete ${continueStory.title}`}
                 />
               </View>
@@ -129,7 +136,7 @@ export const HomeScreen: React.FC = () => {
             story={story}
             narrator={defaultNarrator}
             onPress={() => playStory(story, true)}
-            onRemove={() => setPendingDelete(story)}
+            onRemove={() => openDelete(story)}
             removeLabel={`Delete ${story.title}`}
           />
         )}
@@ -137,7 +144,7 @@ export const HomeScreen: React.FC = () => {
       <ConfirmModal
         visible={pendingDelete !== null}
         title="Delete story"
-        message={`Remove "${pendingDelete?.title ?? 'this story'}"? This cannot be undone.`}
+        message={`Remove "${deleteTitle}"? This cannot be undone.`}
         onCancel={() => setPendingDelete(null)}
         onConfirm={handleConfirmDelete}
       />

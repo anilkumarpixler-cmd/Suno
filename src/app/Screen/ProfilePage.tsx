@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Common/header';
 import { showToast } from '@/components/Common/Toast';
-import { useApp } from '@/Context/AppContext';
+import { useApp, VoicesStatus } from '@/Context/AppContext';
 import { formatDays, formatTime, SleepModeSettings } from '@/services/sleepMode';
 import { theme, ThemeColors } from '@/Theme/Index';
 import { appearanceLabel, useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
@@ -99,7 +99,8 @@ const settings: Array<{
 }> = [
   { id: 'language', title: 'Language', subtitle: 'Hindi + English', icon: 'globe' },
   { id: 'sleepTimer', title: 'Sleep timer', subtitle: 'Off', icon: 'moon', destination: 'SleepTimer' },
-  { id: 'familyVoices', title: 'Family voices', subtitle: '3 voices', icon: 'microphone', destination: 'Voices' },
+  // Subtitle is the live count from the server's voice list (see familyVoicesLabel).
+  { id: 'familyVoices', title: 'Family voices', subtitle: '', icon: 'microphone', destination: 'Voices' },
   { id: 'privacy', title: 'Privacy & voice data', subtitle: 'Manage recordings', icon: 'lock' },
 ];
 
@@ -108,8 +109,15 @@ const sleepModeLabel = (settings: SleepModeSettings) =>
     ? `${formatTime(settings.startMinutes)} – ${formatTime(settings.endMinutes)} · ${formatDays(settings.days)}`
     : 'Off';
 
+/** Live count, e.g. "2 voices"; no "0 voices" while the list is still loading or the server is down. */
+const familyVoicesLabel = (count: number, status: VoicesStatus) => {
+  if (status === 'loading' && count === 0) return 'Loading…';
+  if (status === 'offline' && count === 0) return 'Server not connected';
+  return `${count} ${count === 1 ? 'voice' : 'voices'}`;
+};
+
 export const ProfileScreen: React.FC = () => {
-  const { child, setCurrentScreen, sleepMode } = useApp();
+  const { child, setCurrentScreen, sleepMode, voices, voicesStatus } = useApp();
   const { mode, scheme } = useAppTheme();
   const styles = useThemedStyles(makeStyles);
 
@@ -136,7 +144,13 @@ export const ProfileScreen: React.FC = () => {
           <SettingsCard
             key={setting.id}
             title={setting.title}
-            subtitle={setting.id === 'sleepTimer' ? sleepModeLabel(sleepMode) : setting.subtitle}
+            subtitle={
+              setting.id === 'sleepTimer'
+                ? sleepModeLabel(sleepMode)
+                : setting.id === 'familyVoices'
+                  ? familyVoicesLabel(voices.length, voicesStatus)
+                  : setting.subtitle
+            }
             icon={setting.icon}
             onPress={() => {
               if (setting.destination) {

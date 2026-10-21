@@ -6,11 +6,15 @@ import { CustomDropdown } from '@/components/Common/CustomDropdown';
 import { borderRadius, spacing, theme, ThemeColors } from '@/Theme/Index';
 import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 import { StoryLanguage } from '@/Types';
-import { getFallbackScript, mapStoryTypeToCategory } from '@/services/storySpeech';
+import { mapStoryTypeToCategory } from '@/services/storySpeech';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { showToast } from '@/components/Common/Toast';
+import { ConfirmModal } from '@/modal/confirmModal';
 
 type DropdownKey = 'age' | 'storyType' | 'narrator';
+
+// "Moon Trip" and " moon  trip " are the same title.
+const normalizeTitle = (text: string) => text.trim().replace(/\s+/g, ' ').toLowerCase();
 
 const FormLabel: React.FC<{ children: string }> = ({ children }) => {
   const styles = useThemedStyles(makeStyles);
@@ -22,22 +26,34 @@ const CustomTextInput: React.FC<{
   placeholder?: string;
   onChangeText: (value: string) => void;
   multiline?: boolean;
-}> = ({ value, placeholder, onChangeText, multiline = false }) => {
+  /** Shown under the field with a red border (required / invalid). */
+  error?: string;
+}> = ({ value, placeholder, onChangeText, multiline = false, error }) => {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useAppTheme();
   return (
-    <TextInput
-      style={[styles.input, multiline && styles.storyInput]}
-      value={value}
-      placeholder={placeholder}
-      placeholderTextColor={colors.placeholder}
-      onChangeText={onChangeText}
-      selectionColor={colors.primary}
-      multiline={multiline}
-      textAlignVertical={multiline ? 'top' : 'center'}
-    />
+    <>
+      <TextInput
+        style={[styles.input, multiline && styles.storyInput, Boolean(error) && styles.inputError]}
+        value={value}
+        placeholder={placeholder}
+        placeholderTextColor={colors.placeholder}
+        onChangeText={onChangeText}
+        selectionColor={colors.primary}
+        multiline={multiline}
+        textAlignVertical={multiline ? 'top' : 'center'}
+        accessibilityHint={error || undefined}
+      />
+      {Boolean(error) && (
+        <Text style={styles.errorText} accessibilityLiveRegion="polite">
+          {error}
+        </Text>
+      )}
+    </>
   );
 };
+
+type FieldErrors = { childName?: string; title?: string; topic?: string };
 
 const HeroCard: React.FC<{ childName: string }> = ({ childName }) => {
   const styles = useThemedStyles(makeStyles);
@@ -89,7 +105,7 @@ const LanguageSelector: React.FC<{
 };
 
 export const CreateStoryScreen: React.FC = () => {
-  const { child, voices, defaultNarratorId, createNewStory, setCurrentScreen } = useApp();
+  const { child, voices, stories, defaultNarratorId, createNewStory, setCurrentScreen } = useApp();
   const styles = useThemedStyles(makeStyles);
   const [childName, setChildName] = useState(child.name || 'Aarav');
   const [age, setAge] = useState('3 years');
@@ -99,6 +115,12 @@ export const CreateStoryScreen: React.FC = () => {
   const [storyType, setStoryType] = useState('Bedtime adventure');
   const [narratorId, setNarratorId] = useState(defaultNarratorId);
   const [openDropdown, setOpenDropdown] = useState<DropdownKey | null>(null);
+  const [duplicateTitle, setDuplicateTitle] = useState<string | null>(null);
+  const [errors, setErrors] = useState<FieldErrors>({});
+
+  // Typing in a field clears its own message.
+  const clearError = (field: keyof FieldErrors) =>
+    setErrors((current) => (current[field] ? { ...current, [field]: undefined } : current));
 
   const ageOptions = ['2 years', '3 years', '4 years', '5 years', '6 years'];
   const storyTypeOptions = [
@@ -126,6 +148,7 @@ export const CreateStoryScreen: React.FC = () => {
       return;
     }
     setTitle(text);
+    clearError('title');
   };
 
   const toggleDropdown = (dropdown: DropdownKey) => {
@@ -139,19 +162,24 @@ export const CreateStoryScreen: React.FC = () => {
 
   const handleCreateStory = () => {
     const storyTitle = title.trim();
-    if (!storyTitle) {
-      showToast('Add a story title', 'error');
+    const script = topic.trim();
+    // Every missing field is flagged at once, not one per tap.
+    const nextErrors: FieldErrors = {
+      childName: childName.trim() ? undefined : "Child's name is required",
+      title: !storyTitle
+        ? 'Story title is required'
+        : getWordCount(storyTitle) > 20
+          ? 'Story title cannot exceed 20 words'
+          : undefined,
+      topic: script ? undefined : 'Story topic is required',
+    };
+    setErrors(nextErrors);
+    if (Object.values(nextErrors).some(Boolean)) {
+      showToast('Please fill in all required fields', 'error');
       return;
     }
-    if (getWordCount(storyTitle) > 20) {
-      showToast('Story title cannot exceed 20 words', 'error');
-      return;
-    }
-
-    const personalizedName = childName.trim() || child.name || 'Aarav';
-    const script = topic.trim() || getFallbackScript(personalizedName, storyType, language);
-    if (!script) {
-      showToast('Write what the story is about', 'error');
+    if (stories.some((story) => normalizeTitle(story.title) === normalizeTitle(storyTitle))) {
+      setDuplicateTitle(storyTitle);
       return;
     }
 
@@ -161,6 +189,7 @@ export const CreateStoryScreen: React.FC = () => {
       language,
       category: mapStoryTypeToCategory(storyType),
       narratorId,
+      childName: childName.trim(),
     })
       .then(() => {
         showToast('Story created', 'success');
@@ -192,7 +221,14 @@ export const CreateStoryScreen: React.FC = () => {
         <View style={styles.formCard}>
           <View style={styles.field}>
             <FormLabel>Child's name</FormLabel>
-            <CustomTextInput value={childName} onChangeText={setChildName} />
+            <CustomTextInput
+              value={childName}
+              onChangeText={(text) => {
+                setChildName(text);
+                clearError('childName');
+              }}
+              error={errors.childName}
+            />
           </View>
 
           <View style={styles.field}>
@@ -217,6 +253,7 @@ export const CreateStoryScreen: React.FC = () => {
               value={title}
               placeholder="e.g. Aarav and the Moon"
               onChangeText={handleTitleChange}
+              error={errors.title}
             />
           </View>
 
@@ -225,8 +262,12 @@ export const CreateStoryScreen: React.FC = () => {
             <CustomTextInput
               value={topic}
               placeholder="Write the story here, e.g. dinosaurs, moon, jungle"
-              onChangeText={setTopic}
+              onChangeText={(text) => {
+                setTopic(text);
+                clearError('topic');
+              }}
               multiline
+              error={errors.topic}
             />
           </View>
 
@@ -271,6 +312,14 @@ export const CreateStoryScreen: React.FC = () => {
           </Pressable>
         </View>
       </ScrollView>
+
+      <ConfirmModal
+        visible={duplicateTitle !== null}
+        title="Story already saved"
+        message={`A story named "${duplicateTitle ?? ''}" is already saved. Please choose a different title.`}
+        cancelLabel="OK"
+        onCancel={() => setDuplicateTitle(null)}
+      />
     </SafeAreaView>
   );
 };
@@ -322,6 +371,8 @@ const makeStyles = (colors: ThemeColors) => ({
   lastField: { marginBottom: 1 },
   label: { ...theme.typography.section, color: colors.textDark, marginBottom: 8 },
   storyInput: { minHeight: 120, paddingTop: 12 },
+  inputError: { borderColor: colors.danger },
+  errorText: { ...theme.typography.caption, color: colors.danger, marginTop: 6 },
   input: {
     minHeight: 51,
     borderColor: colors.borderLight,

@@ -76,6 +76,7 @@ const VOICE_POLL_MS = 2000;
 
 const screenRoutes: Record<RootScreen, string> = {
   Home: '/',
+  Search: '/Screen/SearchPage',
   Voices: '/Screen/VoicePage',
   Create: '/Screen/CreateStoryPage',
   Profile: '/Screen/ProfilePage',
@@ -329,6 +330,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isFavorite: false,
       script,
       language: input.language,
+      childName: input.childName.trim() || undefined,
     };
 
     const saved = await saveStory(newStory);
