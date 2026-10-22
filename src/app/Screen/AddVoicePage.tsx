@@ -16,6 +16,7 @@ import {
   useAudioPlayer,
   useAudioRecorder,
   useAudioRecorderState,
+  type RecordingStatus,
 } from 'expo-audio';
 import { abandonRecordingFocus, requestRecordingFocus } from '../../../modules/suno-media-session';
 import { useApp } from '@/Context/AppContext';
@@ -68,7 +69,8 @@ export const AddVoiceScreen: React.FC = () => {
   const nameUsable = key !== '' && !nameTaken;
   const [selectedLang, setSelectedLang] = useState('Hindi + English');
   const [isLangOpen, setIsLangOpen] = useState(false);
-  const [timer, setTimer] = useState(0);
+  // Length of the saved recording, as the recorder measured it (not a JS timer).
+  const [recordedSeconds, setRecordedSeconds] = useState(0);
   const [isRecorded, setIsRecorded] = useState(false);
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
@@ -81,29 +83,23 @@ export const AddVoiceScreen: React.FC = () => {
   const startingRef = useRef(false);
   const [isStarting, setIsStarting] = useState(false);
 
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  // Ref: the recorder subscribes its status listener once, so it must not capture stale state.
+  const recordingFinishedRef = useRef<(status: RecordingStatus) => void>(() => undefined);
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY, (status) =>
+    recordingFinishedRef.current(status),
+  );
   const recorderState = useAudioRecorderState(recorder);
   const player = useAudioPlayer(recordedUri ?? undefined);
   const isRecording = recorderState.isRecording;
+  const elapsedSeconds = Math.min(Math.floor(recorderState.durationMillis / 1000), MAX_RECORDING_SECONDS);
+  // True from record() until this recording is handled, so a manual stop and the native
+  // finish event (both platforms emit one on every stop) save it only once.
+  const activeRecordingRef = useRef(false);
   // Stable: a story starting stops the preview / the recording (one sound at a time).
   const stopPreviewRef = useRef<() => void>(() => undefined);
   const stopPreviewForOtherMedia = useRef(() => stopPreviewRef.current()).current;
   const stopRecordingRef = useRef<() => void>(() => undefined);
   const stopRecordingForOtherMedia = useRef(() => stopRecordingRef.current()).current;
-
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | undefined;
-    if (isRecording) {
-      interval = setInterval(() => setTimer((value) => value + 1), 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isRecording]);
-
-  useEffect(() => {
-    if (isRecording && timer >= MAX_RECORDING_SECONDS) void handleStopRecording();
-  }, [isRecording, timer]);
 
   useEffect(() => {
     if (recordedUri) player.replace(recordedUri);
@@ -140,7 +136,7 @@ export const AddVoiceScreen: React.FC = () => {
     await deleteVoiceRecording(recordedUri ?? undefined);
     setRecordedUri(null);
     setIsRecorded(false);
-    setTimer(0);
+    setRecordedSeconds(0);
   };
 
   const handleStartRecording = async () => {
@@ -174,7 +170,9 @@ export const AddVoiceScreen: React.FC = () => {
       // Other apps' audio is paused before the mic opens, so the timer starts on a quiet room.
       await beginRecordingAudio();
       await recorder.prepareToRecordAsync();
-      recorder.record();
+      // The native recorder enforces the cap, so it holds while the app is in the background too.
+      recorder.record({ forDuration: MAX_RECORDING_SECONDS });
+      activeRecordingRef.current = true;
       // A story started from the mini player stops the recording instead of playing into it.
       claimMedia(stopRecordingForOtherMedia);
     } catch {
@@ -186,20 +184,41 @@ export const AddVoiceScreen: React.FC = () => {
     }
   };
 
+  const keepRecording = (uri: string, seconds: number) => {
+    setRecordedUri(uri);
+    setRecordedSeconds(seconds);
+    setIsRecorded(true);
+  };
+
   const handleStopRecording = async () => {
+    if (!activeRecordingRef.current) return;
+    activeRecordingRef.current = false;
     releaseMedia(stopRecordingForOtherMedia);
+    // Read before stop: the recorder resets its duration to 0 once stopped.
+    const seconds = recorder.getStatus().durationMillis / 1000;
     try {
       await recorder.stop();
       const uri = recorder.uri;
-      if (uri) {
-        setRecordedUri(uri);
-        setIsRecorded(true);
-      }
+      if (uri) keepRecording(uri, seconds);
     } catch {
       Alert.alert('Recording error', 'Could not save the recording.');
     } finally {
       endRecordingAudio();
     }
+  };
+
+  // The recorder stopped on its own: the 30 s cap was reached, or the system ended it.
+  recordingFinishedRef.current = (status) => {
+    if (!status.isFinished || !activeRecordingRef.current) return;
+    activeRecordingRef.current = false;
+    releaseMedia(stopRecordingForOtherMedia);
+    endRecordingAudio();
+    const uri = status.url ?? recorder.uri;
+    if (status.hasError || !uri) {
+      Alert.alert('Recording error', 'Could not save the recording.');
+      return;
+    }
+    keepRecording(uri, MAX_RECORDING_SECONDS);
   };
 
   stopPreviewRef.current = stopPreview;
@@ -238,7 +257,7 @@ export const AddVoiceScreen: React.FC = () => {
       Alert.alert('Record your voice', 'Please record your voice before saving.');
       return;
     }
-    if (timer < MIN_RECORDING_SECONDS) {
+    if (recordedSeconds < MIN_RECORDING_SECONDS) {
       Alert.alert(
         'Recording too short',
         `Please read aloud for at least ${MIN_RECORDING_SECONDS} seconds so the voice can be cloned clearly.`,
@@ -331,7 +350,7 @@ export const AddVoiceScreen: React.FC = () => {
             Read the sample story aloud clearly for 15–20 seconds in a quiet room to clone your voice tone.
           </Text>
 
-          {isRecording && <Text style={styles.timerText}>{formatTime(timer)}</Text>}
+          {isRecording && <Text style={styles.timerText}>{formatTime(elapsedSeconds)}</Text>}
 
           {!isRecording && !isRecorded && (
             <TouchableOpacity

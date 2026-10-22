@@ -31,13 +31,18 @@ export const getFallbackScript = (
   return `${childName}'s ${storyType} about a bedtime adventure.`;
 };
 
-export const mapStoryTypeToCategory = (storyType: string): Category => {
-  const value = storyType.toLowerCase();
-  if (value.includes('animal')) return 'Animals';
-  if (value.includes('learn')) return 'Learning';
-  if (value.includes('bedtime')) return 'Bedtime';
-  return 'Adventure';
-};
+/** Story types in the Create form; each has its own Home filter, so the two lists can't drift. */
+export const STORY_TYPES: { label: string; category: Category; icon: string }[] = [
+  { label: 'Bedtime adventure', category: 'Bedtime', icon: '🌙' },
+  { label: 'Funny adventure', category: 'Funny', icon: '😄' },
+  { label: 'Magical adventure', category: 'Magical', icon: '✨' },
+  { label: 'Learning story', category: 'Learning', icon: '📘' },
+  { label: 'Animal adventure', category: 'Animals', icon: '🐻' },
+];
+
+/** 'Adventure': the built-in space story, and Funny / Magical stories saved before they had their own. */
+export const mapStoryTypeToCategory = (storyType: string): Category =>
+  STORY_TYPES.find((type) => type.label === storyType)?.category ?? 'Adventure';
 
 export const normalizeStory = (story: Story): Story => {
   const script = story.script || story.description || story.title;

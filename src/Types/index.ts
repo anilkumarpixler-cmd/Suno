@@ -1,4 +1,11 @@
-export type Category = 'All' | 'Bedtime' | 'Animals' | 'Adventure' | 'Learning';
+export type Category =
+  | 'All'
+  | 'Bedtime'
+  | 'Funny'
+  | 'Magical'
+  | 'Learning'
+  | 'Animals'
+  | 'Adventure';
 
 export type StoryLanguage = 'Hindi' | 'English' | 'Hinglish';
 

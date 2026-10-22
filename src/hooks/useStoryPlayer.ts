@@ -41,6 +41,8 @@ export const STORY_AUDIO_MODE: Partial<AudioMode> = {
 const SPEED_STORAGE_KEY = '@suno_playback_speed';
 // Global narrator for every story; '' / missing means System Voice (device TTS).
 const DEFAULT_NARRATOR_STORAGE_KEY = '@suno_default_narrator_id';
+// Statuses this soon after a JS play() / pause() may still show the old state.
+const NATIVE_SETTLE_MS = 1000;
 
 const parseSpeed = (value: unknown): PlaybackSpeed => {
   const next = Number(value);
@@ -99,7 +101,6 @@ export const useStoryPlayer = ({
   const [hasServerSession, setHasServerSession] = useState(false);
 
   const player = useAudioPlayer(null, { updateInterval: 250 });
-  const [playerPlaying, setPlayerPlaying] = useState(false);
 
   const storyRef = useRef<Story | null>(null);
   const currentTimeRef = useRef(0);
@@ -126,6 +127,11 @@ export const useStoryPlayer = ({
   const pendingSaveRef = useRef<PendingSave | null>(null);
   // Last play() / pause() from JS: statuses right after it may still show the old state.
   const lastJsCommandAtRef = useRef(0);
+  // Re-reads the native player once that window ends: expo-audio sends one status for a native
+  // pause (another app took focus) and none after, so a skipped one would leave JS "playing".
+  const nativeResyncRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Where a narrator story resumes while its voice prepares (the clock shows 0 meanwhile).
+  const preparingFromRef = useRef(0);
   const pausePlaybackRef = useRef<() => void>(() => undefined);
   // Stable: another sound in Suno (voice preview, recording) starting pauses the story.
   const stopStoryForOtherMedia = useRef(() => pausePlaybackRef.current()).current;
@@ -173,7 +179,14 @@ export const useStoryPlayer = ({
 
   const resolveLanguage = (story: Story) => story.language || 'English';
 
+  const clearNativeResync = () => {
+    if (!nativeResyncRef.current) return;
+    clearTimeout(nativeResyncRef.current);
+    nativeResyncRef.current = null;
+  };
+
   const safePause = () => {
+    clearNativeResync();
     lastJsCommandAtRef.current = Date.now();
     try {
       player.pause();
@@ -183,12 +196,31 @@ export const useStoryPlayer = ({
   };
 
   const safePlay = () => {
+    clearNativeResync();
     lastJsCommandAtRef.current = Date.now();
     try {
       player.play();
     } catch {
       // Native player can already be released.
     }
+  };
+
+  /** Android: expo-audio only asks for audio focus when its flag says it has none, and that flag
+   * can be left set after another app took the audio. Dropping it first makes play() ask again,
+   * so Suno holds the audio and the next app that plays pauses it. Only for a paused or new
+   * track: it pauses every playing player. */
+  const playWithFreshFocus = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        await setIsAudioActiveAsync(false);
+        await setIsAudioActiveAsync(true);
+      } catch {
+        // Keep playing even if the native call fails.
+      }
+      // The user may have paused while this ran.
+      if (!shouldPlayRef.current) return;
+    }
+    safePlay();
   };
 
   /** Stops the server reading a narrator story this app no longer waits for. */
@@ -272,11 +304,18 @@ export const useStoryPlayer = ({
     });
   };
 
-  const startClonedPlayback = (audioUrl: string, trackDuration: number, resumeAt: number) => {
+  const startClonedPlayback = (
+    audioUrl: string,
+    trackDuration: number,
+    resumeAt: number,
+    durationKnown: boolean,
+  ) => {
     setSource('server');
     setAudioDuration(trackDuration);
+    // An estimated length (word count) is shorter than a slow cloned voice: a resume point past
+    // it is checked against the real length once the track loads (status listener), not dropped.
     const start =
-      resumeAt > 0.4 && resumeAt < trackDuration - 0.5 ? resumeAt : 0;
+      resumeAt > 0.4 && (!durationKnown || resumeAt < trackDuration - 0.5) ? resumeAt : 0;
     hasStartedRef.current = false;
     setTime(start);
     if (start === 0) {
@@ -286,7 +325,7 @@ export const useStoryPlayer = ({
       awaitingPlayRef.current = false;
       player.replace(audioUrl);
       applyPlayerRate(playbackSpeedRef.current);
-      safePlay();
+      void playWithFreshFocus();
       return;
     }
     pendingStartRef.current = start;
@@ -363,7 +402,12 @@ export const useStoryPlayer = ({
       // The length is known once the player loads the file; until then the saved or estimated one.
       const known = story.clonedVoiceId === voice.id && story.duration ? story.duration : 0;
       pendingSaveRef.current = { story, audioUrl: started.audioUrl, voiceId: voice.id, language };
-      startClonedPlayback(started.audioUrl, known || estimateDuration(storyText(story)), resumeAt);
+      startClonedPlayback(
+        started.audioUrl,
+        known || estimateDuration(storyText(story)),
+        resumeAt,
+        known > 0,
+      );
     } catch (error) {
       if (speakId !== speakIdRef.current) return;
       const message = error instanceof Error ? error.message : 'Voice clone failed';
@@ -411,6 +455,8 @@ export const useStoryPlayer = ({
     }
 
     setSource('preparing');
+    // The clock shows 0 while preparing; a pause in that time goes back to here (pausePlayback).
+    preparingFromRef.current = time;
     setTime(0);
     void playClonedAudio(story, narrator, time, speakId);
   };
@@ -457,20 +503,35 @@ export const useStoryPlayer = ({
     speakRemaining(story, startTime);
   };
 
+  /** Ref, not state: lock-screen / notification commands can arrive before a re-render. A
+   * narrator track asks the native player once settled: another app may have paused it. */
+  const isStoryPlaying = () => {
+    if (!shouldPlayRef.current) return false;
+    if (playbackSourceRef.current !== 'server' || awaitingPlayRef.current) return true;
+    if (Date.now() - lastJsCommandAtRef.current <= NATIVE_SETTLE_MS) return true;
+    try {
+      return player.playing || player.isBuffering;
+    } catch {
+      return true;
+    }
+  };
+
   const togglePlayPause = async () => {
     if (!activeStory || playbackSourceRef.current === 'preparing') return;
     cancelEndHold();
 
-    // Ref, not state: lock-screen / notification commands can arrive before a re-render.
-    if (shouldPlayRef.current) {
+    if (isStoryPlaying()) {
       shouldPlayRef.current = false;
       setIsPlaying(false);
       if (playbackSourceRef.current === 'server') {
         safePause();
         return;
       }
+      // Android stops speech (it can't pause): drop this utterance first, or an engine that reports
+      // the stop as "done" moves the clock to the end and the next Play restarts the story.
+      if (Platform.OS === 'android') speakIdRef.current += 1;
       const result = await pauseSpeech();
-      if (result === 'stopped') speakIdRef.current += 1;
+      if (result === 'stopped' && Platform.OS !== 'android') speakIdRef.current += 1;
       return;
     }
 
@@ -488,7 +549,7 @@ export const useStoryPlayer = ({
           // ignore
         }
       }
-      safePlay();
+      void playWithFreshFocus();
       return;
     }
 
@@ -625,6 +686,8 @@ export const useStoryPlayer = ({
     stopSpeech();
     if (playbackSourceRef.current === 'preparing') {
       cancelServerRead();
+      // Saved progress and the next Play continue from where the story was, not from 0.
+      setTime(preparingFromRef.current);
       setSource('idle');
     }
   };
@@ -699,34 +762,49 @@ export const useStoryPlayer = ({
     });
   };
 
+  const syncWithNativePlayer = (nativePlaying: boolean) => {
+    if (!nativePlaying && shouldPlayRef.current && hasStartedRef.current) {
+      shouldPlayRef.current = false;
+      setIsPlaying(false);
+    } else if (nativePlaying && !shouldPlayRef.current) {
+      shouldPlayRef.current = true;
+      setIsPlaying(true);
+    }
+  };
+
   // Player status is handled in the native event, not mirrored through effects: copying it into
   // state from effects on every 250 ms tick tripped React's nested-update limit at story end.
   useEventListener(player, 'playbackStatusUpdate', (status: AudioStatus) => {
     // Android's error status carries only `error` (no playing / time / duration fields).
     if (status.error) {
-      setPlayerPlaying(false);
       if (playbackSourceRef.current === 'server') handleTrackError(status.error);
       return;
     }
-    setPlayerPlaying(status.playing);
     if (playbackSourceRef.current !== 'server') return;
 
     // Native pause / resume JS didn't ask for: another app took audio focus (or gave it back),
     // or the iOS lock screen / a call. The buttons follow, and Play takes the focus back.
-    const settled = Date.now() - lastJsCommandAtRef.current > 1000;
     if (
-      settled &&
       status.isLoaded &&
       !status.isBuffering &&
       !status.didJustFinish &&
       !awaitingPlayRef.current
     ) {
-      if (!status.playing && shouldPlayRef.current && hasStartedRef.current) {
-        shouldPlayRef.current = false;
-        setIsPlaying(false);
-      } else if (status.playing && !shouldPlayRef.current) {
-        shouldPlayRef.current = true;
-        setIsPlaying(true);
+      const sinceCommand = Date.now() - lastJsCommandAtRef.current;
+      if (sinceCommand > NATIVE_SETTLE_MS) {
+        syncWithNativePlayer(status.playing);
+      } else {
+        // Too close to our own play / pause to trust: check the player once it has settled.
+        clearNativeResync();
+        nativeResyncRef.current = setTimeout(() => {
+          nativeResyncRef.current = null;
+          if (playbackSourceRef.current !== 'server' || awaitingPlayRef.current) return;
+          try {
+            if (player.isLoaded && !player.isBuffering) syncWithNativePlayer(player.playing);
+          } catch {
+            // Native player can already be released.
+          }
+        }, NATIVE_SETTLE_MS - sinceCommand + 50);
       }
     }
 
@@ -736,14 +814,22 @@ export const useStoryPlayer = ({
         status.isLoaded || (typeof status.duration === 'number' && status.duration > 0);
       if (!shouldPlayRef.current || !loaded) return;
       awaitingPlayRef.current = false;
-      const start = pendingStartRef.current;
+      let start = pendingStartRef.current;
       pendingStartRef.current = 0;
       applyPlayerRate(playbackSpeedRef.current);
+      // Paused at the very end of the real track: the story had finished, so it starts over.
+      if (typeof status.duration === 'number' && status.duration > 0 && start >= status.duration - 0.5) {
+        start = 0;
+        setTime(0);
+      }
       if (start > 0.4) {
-        void player.seekTo(start).then(() => safePlay()).catch(() => safePlay());
+        void player
+          .seekTo(start)
+          .catch(() => undefined)
+          .then(() => playWithFreshFocus());
         return;
       }
-      safePlay();
+      void playWithFreshFocus();
       return;
     }
 
@@ -795,11 +881,11 @@ export const useStoryPlayer = ({
 
     switch (command.action) {
       case 'play':
-        if (!shouldPlayRef.current) void togglePlayPause();
+        if (!isStoryPlaying()) void togglePlayPause();
         return;
       case 'pause':
         if (source === 'preparing') pausePlayback();
-        else if (shouldPlayRef.current) void togglePlayPause();
+        else if (isStoryPlaying()) void togglePlayPause();
         return;
       case 'seekTo':
         seekTo(command.positionMs / 1000);
@@ -828,10 +914,10 @@ export const useStoryPlayer = ({
     active: Boolean(activeStory) && playbackSource !== 'idle',
     story: activeStory,
     narratorName: activeStory ? resolveNarrator()?.name : undefined,
-    isPlaying:
-      playbackSource === 'server'
-        ? playerPlaying
-        : (playbackSource === 'device' || playbackSource === 'preparing') && isPlaying,
+    // The play intent, as on the in-app buttons: not the native player's flag, which drops on
+    // every buffer and between stories (the card flickered). Native pauses (another app took
+    // the audio) still reach it through the status sync below.
+    isPlaying: playbackSource !== 'idle' && isPlaying,
     currentTime,
     duration,
     speed: playbackSpeed,
@@ -860,6 +946,7 @@ export const useStoryPlayer = ({
 
   useEffect(
     () => () => {
+      clearNativeResync();
       haltSpeech();
     },
     [],

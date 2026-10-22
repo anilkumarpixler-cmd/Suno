@@ -6,7 +6,7 @@ import { CustomDropdown } from '@/components/Common/CustomDropdown';
 import { borderRadius, spacing, theme, ThemeColors } from '@/Theme/Index';
 import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 import { StoryLanguage } from '@/Types';
-import { mapStoryTypeToCategory } from '@/services/storySpeech';
+import { mapStoryTypeToCategory, STORY_TYPES } from '@/services/storySpeech';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { showToast } from '@/components/Common/Toast';
 import { ConfirmModal } from '@/modal/confirmModal';
@@ -123,13 +123,7 @@ export const CreateStoryScreen: React.FC = () => {
     setErrors((current) => (current[field] ? { ...current, [field]: undefined } : current));
 
   const ageOptions = ['2 years', '3 years', '4 years', '5 years', '6 years'];
-  const storyTypeOptions = [
-    'Bedtime adventure',
-    'Funny adventure',
-    'Magical adventure',
-    'Learning story',
-    'Animal adventure',
-  ];
+  const storyTypeOptions = STORY_TYPES.map((type) => type.label);
   const selectedNarrator = voices.find((voice) => voice.id === narratorId);
   const narratorOptions = [
     'System Voice',

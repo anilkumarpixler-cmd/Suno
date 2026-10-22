@@ -7,6 +7,7 @@ import { StoryCard } from '@/components/Common/Home/StoryCart';
 import { showToast } from '@/components/Common/Toast';
 import { ConfirmModal } from '@/modal/confirmModal';
 import { Category, Story } from '@/Types';
+import { STORY_TYPES } from '@/services/storySpeech';
 import { borderRadius, spacing, theme, ThemeColors } from '@/Theme/Index';
 import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -40,10 +41,10 @@ export const HomeScreen: React.FC = () => {
     showToast('Story deleted', 'success');
   };
 
+  // One pill per Create story type, plus Adventure for the built-in and older stories.
   const categories: { label: Category; icon?: string }[] = [
     { label: 'All' },
-    { label: 'Bedtime', icon: '🌙' },
-    { label: 'Animals', icon: '🐻' },
+    ...STORY_TYPES.map((type) => ({ label: type.category, icon: type.icon })),
     { label: 'Adventure', icon: '🚀' },
   ];
 
@@ -131,6 +132,17 @@ export const HomeScreen: React.FC = () => {
             <Text style={[styles.subSectionTitle, styles.popularTitle]}>Popular stories</Text>
           </>
         }
+        // Only when the category has none: the one in "Continue listening" is left out of this list.
+        ListEmptyComponent={
+          filteredStories.length === 0 ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>
+                {selectedCategory === 'All' ? 'No stories yet' : `No ${selectedCategory} stories yet`}
+              </Text>
+              <Text style={styles.emptySub}>Tap + Create to make one.</Text>
+            </View>
+          ) : null
+        }
         renderItem={({ item: story }) => (
           <StoryCard
             story={story}
@@ -212,4 +224,12 @@ const makeStyles = (colors: ThemeColors) => ({
   pillText: { ...theme.typography.badge, color: colors.textDark, fontSize: 17, lineHeight: 22 },
   activePillText: { color: colors.onPrimary },
   section: { marginTop: spacing.xs },
+  empty: { alignItems: 'center' as const, paddingHorizontal: spacing.lg, paddingVertical: spacing.xl },
+  emptyTitle: {
+    ...theme.typography.section,
+    color: colors.textDark,
+    marginBottom: 8,
+    textAlign: 'center' as const,
+  },
+  emptySub: { ...theme.typography.body, color: colors.textMuted, textAlign: 'center' as const },
 });
