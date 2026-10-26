@@ -97,7 +97,7 @@ const SENTENCE_BREAKS = ['. ', '। ', '! ', '? '];
 
 /** `text` in exact consecutive slices the engine accepts (Android: 4000 chars per utterance),
  * cut after a sentence end when possible, else at a space. */
-const speechParts = (text: string): string[] => {
+export const speechParts = (text: string): string[] => {
   const limit = Speech.maxSpeechInputLength;
   const parts: string[] = [];
   let rest = text;

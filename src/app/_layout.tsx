@@ -10,6 +10,7 @@ import { BottomNavigation, bottomNavigationHeight } from '@/components/Common/Bo
 import { MiniPlayerBar } from '@/components/Common/MiniPlayerBar';
 import { setBottomToastOffset, Toast } from '@/components/Common/Toast';
 import { ThemeProvider, useAppTheme } from '@/Theme/ThemeProvider';
+import { useAndroidBack } from '@/hooks/useAndroidBack';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
 import { ConfirmModal } from '@/modal/confirmModal';
 import { RootScreen } from '@/Types';
@@ -26,9 +27,10 @@ const tabRoutes: Record<string, RootScreen> = {
 
 function AppNavigator() {
   const pathname = usePathname();
-  const { currentScreen, setCurrentScreen } = useApp();
+  const { currentScreen, setCurrentScreen, narratorPickerStoryId } = useApp();
   const { scheme, colors } = useAppTheme();
   const notification = useNotificationPermission();
+  useAndroidBack(currentScreen, setCurrentScreen, narratorPickerStoryId);
   const activeScreen = tabRoutes[pathname] ?? currentScreen;
   const showBottomNavigation = pathname in tabRoutes && pathname !== '/create';
   const insets = useSafeAreaInsets();

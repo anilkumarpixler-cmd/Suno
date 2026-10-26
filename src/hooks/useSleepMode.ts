@@ -108,6 +108,7 @@ export const useSleepMode = ({ isPlaying, currentTime, onSleep }: UseSleepModeAr
       else showSleepToast(`Sleep mode is on. Stories are paused until ${sleepUntilLabel()}.`);
       return;
     }
+    
 
     const seconds = secondsUntilSleep(sleepModeRef.current);
     if (seconds === null) return;
@@ -124,6 +125,7 @@ export const useSleepMode = ({ isPlaying, currentTime, onSleep }: UseSleepModeAr
       )}). Stories will pause.`,
     );
   };
+  
 
   useEffect(() => {
     if (!sleepMode.enabled) return;

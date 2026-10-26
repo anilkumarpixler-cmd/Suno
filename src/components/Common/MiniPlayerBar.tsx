@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { LayoutChangeEvent, PanResponder, Pressable, Text, TouchableOpacity, View } from 'react-native';
+import { PanResponder, Pressable, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useApp } from '../../Context/AppContext';
 import { theme, ThemeColors } from '../../Theme/Index';
@@ -27,7 +27,9 @@ export const MiniPlayerBar: React.FC = () => {
   } = useApp();
   const { colors } = useAppTheme();
   const styles = useThemedStyles(makeStyles);
+  const barRef = useRef<View>(null);
   const barWidthRef = useRef(1);
+  const barPageXRef = useRef(0);
   const durationRef = useRef(1);
   const seekToRef = useRef(seekTo);
   seekToRef.current = seekTo;
@@ -40,10 +42,11 @@ export const MiniPlayerBar: React.FC = () => {
   const dragTimeRef = useRef<number | null>(null);
 
   const scrubberPan = useMemo(() => {
-    const track = (locationX: number) => {
+    const track = (pageX: number) => {
       const width = barWidthRef.current;
       if (width <= 0) return;
-      const time = Math.max(0, Math.min(1, locationX / width)) * durationRef.current;
+      const time =
+        Math.max(0, Math.min(1, (pageX - barPageXRef.current) / width)) * durationRef.current;
       if (dragTimeRef.current === null || Math.floor(time) !== Math.floor(dragTimeRef.current)) {
         setDragTime(time);
       }
@@ -58,8 +61,11 @@ export const MiniPlayerBar: React.FC = () => {
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (event) => track(event.nativeEvent.locationX),
-      onPanResponderMove: (event) => track(event.nativeEvent.locationX),
+      onPanResponderTerminationRequest: () => false,
+      // pageX, not locationX: locationX is relative to whichever view reports the touch, so it
+      // often read 0 and every tap seeked to the start.
+      onPanResponderGrant: (event) => track(event.nativeEvent.pageX),
+      onPanResponderMove: (event) => track(event.nativeEvent.pageX),
       onPanResponderRelease: release,
       onPanResponderTerminate: release,
     });
@@ -69,8 +75,11 @@ export const MiniPlayerBar: React.FC = () => {
 
   const progressPct = Math.min(100, Math.max(0, ((dragTime ?? currentTime) / duration) * 100));
 
-  const onSliderLayout = (event: LayoutChangeEvent) => {
-    barWidthRef.current = event.nativeEvent.layout.width;
+  const onSliderLayout = () => {
+    barRef.current?.measure((_x, _y, width, _height, pageX) => {
+      barWidthRef.current = width;
+      barPageXRef.current = pageX;
+    });
   };
 
   return (
@@ -152,6 +161,7 @@ export const MiniPlayerBar: React.FC = () => {
         </Pressable>
 
         <View
+          ref={barRef}
           style={styles.sliderHit}
           onLayout={onSliderLayout}
           {...scrubberPan.panHandlers}

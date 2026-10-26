@@ -76,6 +76,8 @@ export const AddVoiceScreen: React.FC = () => {
   const [isPreviewing, setIsPreviewing] = useState(false);
   // Mic denied for good: themed pop-up (light / dark) with Open Settings.
   const [micSettingsVisible, setMicSettingsVisible] = useState(false);
+  // Recording under MIN_RECORDING_SECONDS: themed, rounded info pop-up instead of the native alert.
+  const [tooShortVisible, setTooShortVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   // Ref, not state: a second tap can arrive before the re-render that disables the button.
   const savingRef = useRef(false);
@@ -258,10 +260,7 @@ export const AddVoiceScreen: React.FC = () => {
       return;
     }
     if (recordedSeconds < MIN_RECORDING_SECONDS) {
-      Alert.alert(
-        'Recording too short',
-        `Please read aloud for at least ${MIN_RECORDING_SECONDS} seconds so the voice can be cloned clearly.`,
-      );
+      setTooShortVisible(true);
       return;
     }
 
@@ -411,6 +410,14 @@ export const AddVoiceScreen: React.FC = () => {
           setMicSettingsVisible(false);
           void Linking.openSettings();
         }}
+      />
+
+      <ConfirmModal
+        visible={tooShortVisible}
+        title="Recording too short"
+        message={`Please read aloud for at least ${MIN_RECORDING_SECONDS} seconds so the voice can be cloned clearly.`}
+        cancelLabel="OK"
+        onCancel={() => setTooShortVisible(false)}
       />
     </SafeAreaView>
   );

@@ -16,6 +16,7 @@ import {
   deleteStory as deleteSavedStory,
   getDeletedStoryIds,
   getStories,
+  getStoryChanges,
   markStoryDeleted,
   saveStory,
   updateStory,
@@ -99,6 +100,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     initialStories.find((story) => story.progress > 0)?.id ?? null
   );
   const [narratorPickerStoryId, setNarratorPickerStoryId] = useState<string | null>(null);
+  // Story fields changed in memory, so the startup load doesn't overwrite them with older saved values.
+  const touchedFieldsRef = useRef(new Map<string, Set<keyof Story>>());
+  const markTouched = (storyId: string, fields: (keyof Story)[]) => {
+    const touched = touchedFieldsRef.current.get(storyId) ?? new Set<keyof Story>();
+    fields.forEach((field) => touched.add(field));
+    touchedFieldsRef.current.set(storyId, touched);
+  };
+  /** Fields changed in memory since launch, taken from the in-memory copy of the story. */
+  const localEdits = (live?: Story): Partial<Story> => {
+    const fields = live && touchedFieldsRef.current.get(live.id);
+    if (!live || !fields) return {};
+    return Object.fromEntries([...fields].map((field) => [field, live[field]]));
+  };
 
   const pathname = usePathname();
   const targetRouteRef = useRef(pathname);
@@ -159,6 +173,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         clonedLanguage: language,
         progress: 0,
       };
+      markTouched(storyId, Object.keys(updates) as (keyof Story)[]);
       void updateStory(storyId, updates);
       setStories((currentStories) =>
         currentStories.map((story) => (story.id === storyId ? { ...story, ...updates } : story))
@@ -167,23 +182,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentStory?.id === storyId ? { ...currentStory, ...updates } : currentStory
       );
     },
+    onSystemVoiceDuration: (storyId, systemVoiceDuration) => {
+      markTouched(storyId, ['systemVoiceDuration']);
+      void updateStory(storyId, { systemVoiceDuration });
+      setStories((currentStories) =>
+        currentStories.map((story) => (story.id === storyId ? { ...story, systemVoiceDuration } : story))
+      );
+      setActiveStory((currentStory) =>
+        currentStory?.id === storyId ? { ...currentStory, systemVoiceDuration } : currentStory
+      );
+    },
   });
 
   useEffect(() => {
     let isMounted = true;
 
-    Promise.all([getStories(), getDeletedStoryIds()]).then(([savedStories, deletedIds]) => {
-      if (!isMounted || (savedStories.length === 0 && deletedIds.length === 0)) return;
+    Promise.all([getStories(), getDeletedStoryIds(), getStoryChanges()]).then(([savedStories, deletedIds, changes]) => {
+      const hasChanges = Object.keys(changes).length > 0;
+      if (!isMounted || (savedStories.length === 0 && deletedIds.length === 0 && !hasChanges)) return;
       const deleted = new Set(deletedIds);
       setStories((currentStories) => {
+        const liveStories = new Map(currentStories.map((story) => [story.id, story]));
         const normalized = savedStories
           .filter((story) => !deleted.has(story.id))
-          .map((story) => normalizeStory(story));
+          .map((story) => ({ ...normalizeStory(story), ...localEdits(liveStories.get(story.id)) }));
         const savedIds = new Set(normalized.map((story) => story.id));
-        return [
-          ...normalized,
-          ...currentStories.filter((story) => !savedIds.has(story.id) && !deleted.has(story.id)),
-        ];
+        // Built-in stories keep their place, with their saved favorite/progress/audio applied.
+        const builtIn = currentStories
+          .filter((story) => !savedIds.has(story.id) && !deleted.has(story.id))
+          .map((story) =>
+            changes[story.id] ? { ...story, ...changes[story.id], ...localEdits(story), id: story.id } : story
+          );
+        return [...normalized, ...builtIn];
+      });
+      // Now Playing reads the playing story's own copy: give it the same saved values as the list.
+      setActiveStory((current) => {
+        if (!current || deleted.has(current.id)) return current;
+        const saved = savedStories.find((story) => story.id === current.id);
+        const stored = saved ? normalizeStory(saved) : changes[current.id];
+        if (!stored) return current;
+        return { ...current, ...stored, ...localEdits(current), id: current.id };
       });
       setLastPlayedStoryId((id) => (id && deleted.has(id) ? null : id));
     });
@@ -247,6 +285,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setStories((prev) => {
       const index = prev.findIndex((item) => item.id === storyId);
       if (index < 0 || prev[index].progress === time) return prev;
+      markTouched(storyId, ['progress']);
       const next = [...prev];
       next[index] = { ...prev[index], progress: time };
       return next;
@@ -290,6 +329,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const toggleFavorite = (storyId: string) => {
     const story = stories.find((item) => item.id === storyId);
+    markTouched(storyId, ['isFavorite']);
     if (story) void updateStory(storyId, { isFavorite: !story.isFavorite });
     setStories((prev) =>
       prev.map((item) => (item.id === storyId ? { ...item, isFavorite: !item.isFavorite } : item))

@@ -27,6 +27,10 @@ export const StoryCard: React.FC<StoryCardProps> = ({
   const { colors } = useAppTheme();
   const isContinue = variant === 'continue';
   const narratorLabel = narrator?.name ? `${narrator.name} voice's` : 'System Voice';
+  // Created stories store the script's first 80 characters as their description: show the script,
+  // so the cut lands at the line end with "…", not mid-word.
+  const preview =
+    !story.description || story.script.startsWith(story.description) ? story.script : story.description;
 
   return (
     <View style={[styles.card, isContinue && styles.continueCard]}>
@@ -42,7 +46,9 @@ export const StoryCard: React.FC<StoryCardProps> = ({
           <Text style={styles.title} numberOfLines={1}>
             {story.title}
           </Text>
-          <Text style={styles.preview}>{story.description || story.script}</Text>
+          <Text style={styles.preview} numberOfLines={2}>
+            {preview}
+          </Text>
           <Text style={styles.meta} numberOfLines={1}>
             {narratorLabel} · {story.category}
           </Text>

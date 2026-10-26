@@ -52,6 +52,8 @@ export interface Story {
   audioUri?: string;
   clonedVoiceId?: string;
   clonedLanguage?: string;
+  /** Android: length of the System Voice file, the timeline its progress is saved on. */
+  systemVoiceDuration?: number;
   progress: number; // in seconds
   isFavorite?: boolean;
   script: string;

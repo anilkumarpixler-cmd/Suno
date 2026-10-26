@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   ScrollView,
   PanResponder,
-  LayoutChangeEvent,
   useWindowDimensions,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -53,7 +52,9 @@ export const NowPlayingScreen: React.FC = () => {
   const artSize = Math.min(220, Math.round(windowHeight * 0.4));
   const [speedOpen, setSpeedOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const barRef = useRef<View>(null);
   const barWidthRef = useRef(1);
+  const barPageXRef = useRef(0);
   const durationRef = useRef(1);
   const seekToRef = useRef(seekTo);
   seekToRef.current = seekTo;
@@ -67,10 +68,11 @@ export const NowPlayingScreen: React.FC = () => {
   const dragTimeRef = useRef<number | null>(null);
 
   const scrubberPan = useMemo(() => {
-    const track = (locationX: number) => {
+    const track = (pageX: number) => {
       const width = barWidthRef.current;
       if (width <= 0) return;
-      const time = Math.max(0, Math.min(1, locationX / width)) * durationRef.current;
+      const time =
+        Math.max(0, Math.min(1, (pageX - barPageXRef.current) / width)) * durationRef.current;
       // Re-render only when the shown second changes.
       if (dragTimeRef.current === null || Math.floor(time) !== Math.floor(dragTimeRef.current)) {
         setDragTime(time);
@@ -86,8 +88,12 @@ export const NowPlayingScreen: React.FC = () => {
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (event) => track(event.nativeEvent.locationX),
-      onPanResponderMove: (event) => track(event.nativeEvent.locationX),
+      // The scroll view must not take a drag over (it would seek to wherever the drag was).
+      onPanResponderTerminationRequest: () => false,
+      // pageX, not locationX: locationX is relative to whichever view reports the touch, so it
+      // often read 0 and every tap seeked to the start.
+      onPanResponderGrant: (event) => track(event.nativeEvent.pageX),
+      onPanResponderMove: (event) => track(event.nativeEvent.pageX),
       onPanResponderRelease: release,
       onPanResponderTerminate: release,
     });
@@ -99,8 +105,12 @@ export const NowPlayingScreen: React.FC = () => {
   const shownTime = dragTime ?? currentTime;
   const progressPct = Math.min(100, Math.max(0, (shownTime / duration) * 100));
 
-  const onSliderLayout = (event: LayoutChangeEvent) => {
-    barWidthRef.current = event.nativeEvent.layout.width;
+  // The bar's on-screen x: vertical scrolling doesn't change it, so measuring on layout is enough.
+  const onSliderLayout = () => {
+    barRef.current?.measure((_x, _y, width, _height, pageX) => {
+      barWidthRef.current = width;
+      barPageXRef.current = pageX;
+    });
   };
 
   return (
@@ -174,13 +184,16 @@ export const NowPlayingScreen: React.FC = () => {
           </Text>
           <Text style={styles.subtitle} numberOfLines={1}>
             {isPreparingAudio
-              ? `Preparing story in ${narrator?.name || 'narrator'}'s voice…`
+              ? narrator
+                ? `Preparing story in ${narrator.name}'s voice…`
+                : 'Preparing story…'
               : narrator
                 ? `${activeStory.category} · ${narrator.name}`
                 : `${activeStory.category} · System Voice`}
           </Text>
 
           <View
+            ref={barRef}
             style={styles.sliderHit}
             onLayout={onSliderLayout}
             {...scrubberPan.panHandlers}>

@@ -14,8 +14,15 @@ import { cancelStoryPlay, prefetchStory, readStory, waitStoryAudio } from '../se
 import { showToast } from '../components/Common/Toast';
 import { claimMedia, releaseMedia } from '../services/activeMedia';
 import type { DeviceMediaCommand } from '../../modules/suno-media-session';
+import {
+  cancelSpeechRender,
+  isSpeechRenderAvailable,
+  prefetchSpeech,
+  renderSpeech,
+} from '../../modules/suno-speech-render';
 import { useDeviceMediaSession } from './useDeviceMediaSession';
 import { useLockScreenControls } from './useLockScreenControls';
+import { useMediaKeys } from './useMediaKeys';
 import { showSleepToast, useSleepMode } from './useSleepMode';
 import {
   estimateDuration,
@@ -23,6 +30,7 @@ import {
   pauseSpeech,
   resumeSpeech,
   speakText,
+  speechParts,
   stopSpeech,
   WORDS_PER_SECOND,
 } from '../services/storySpeech';
@@ -49,7 +57,13 @@ const parseSpeed = (value: unknown): PlaybackSpeed => {
   return PLAYBACK_SPEEDS.includes(next as PlaybackSpeed) ? (next as PlaybackSpeed) : 1;
 };
 
+// 'server': a story track in Suno's player (narrator, or System Voice written to a file on
+// Android). 'device': System Voice spoken live by the TTS engine.
 type PlaybackSource = 'idle' | 'preparing' | 'server' | 'device';
+
+// Android writes System Voice to a file Suno plays, so headphone keys reach Suno (speech the
+// TTS engine plays itself counts as the engine's audio and the keys went to other apps).
+const RENDERS_SYSTEM_VOICE = Platform.OS === 'android' && isSpeechRenderAvailable;
 
 type UseStoryPlayerArgs = {
   stories: Story[];
@@ -63,6 +77,8 @@ type UseStoryPlayerArgs = {
     voiceId: string,
     language: string,
   ) => void;
+  /** Real length of a story's System Voice file (Android), saved with the story. */
+  onSystemVoiceDuration?: (storyId: string, duration: number) => void;
 };
 
 const canClone = (voice?: Voice) => Boolean(voice?.id && voice.audioUri);
@@ -71,6 +87,10 @@ const canClone = (voice?: Voice) => Boolean(voice?.id && voice.audioUri);
 const isVoiceReady = (voice?: Voice) => Boolean(voice && (!voice.state || voice.state === 'ready'));
 
 const storyText = (story: Story) => story.script || story.title;
+
+/** The same point in the story on another voice's timeline (each voice reads at its own pace). */
+const rescaleTime = (time: number, fromDuration: number, toDuration: number) =>
+  fromDuration > 1 ? Math.min(toDuration, (time / fromDuration) * toDuration) : time;
 
 /** A finished story shows its full time (e.g. 0:13 / 0:13) this long before repeat / auto-next. */
 const END_HOLD_MS = 800;
@@ -88,6 +108,7 @@ export const useStoryPlayer = ({
   voices,
   setCurrentScreen,
   onClonedAudio,
+  onSystemVoiceDuration,
 }: UseStoryPlayerArgs) => {
   const [activeStory, setActiveStory] = useState<Story | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -109,6 +130,8 @@ export const useStoryPlayer = ({
   const durationRef = useRef(1);
   const playbackSourceRef = useRef<PlaybackSource>('idle');
   const pendingStartRef = useRef(0);
+  // The track length pendingStartRef was measured on; rescaled once the real length loads.
+  const pendingStartScaleRef = useRef(1);
   const awaitingPlayRef = useRef(false);
   const playbackSpeedRef = useRef<PlaybackSpeed>(1);
   // Ref, not state: a narrator change restarts speech in the same tick, before a re-render.
@@ -130,8 +153,10 @@ export const useStoryPlayer = ({
   // Re-reads the native player once that window ends: expo-audio sends one status for a native
   // pause (another app took focus) and none after, so a skipped one would leave JS "playing".
   const nativeResyncRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Where a narrator story resumes while its voice prepares (the clock shows 0 meanwhile).
+  // Where a narrator story resumes while its voice prepares (the clock stays there meanwhile).
   const preparingFromRef = useRef(0);
+  // The loaded track is a System Voice file (its failure falls back to live speech, not to it).
+  const trackIsSystemVoiceRef = useRef(false);
   const pausePlaybackRef = useRef<() => void>(() => undefined);
   // Stable: another sound in Suno (voice preview, recording) starting pauses the story.
   const stopStoryForOtherMedia = useRef(() => pausePlaybackRef.current()).current;
@@ -178,6 +203,25 @@ export const useStoryPlayer = ({
     voices.find((voice) => voice.id === defaultNarratorIdRef.current);
 
   const resolveLanguage = (story: Story) => story.language || 'English';
+
+  /** Where the story is now, also while a narrator voice prepares. */
+  const currentPosition = () =>
+    playbackSourceRef.current === 'preparing' ? preparingFromRef.current : currentTimeRef.current;
+
+  /** After a narrator change: the same point in the story, on the new voice's timeline (its saved
+   * length when this story was read in it before, else the estimate). A finished story starts over. */
+  const positionInNewVoice = (story: Story) => {
+    const position = currentPosition();
+    const finished = endingRef.current || position >= durationRef.current - 1;
+    const narrator = resolveNarrator();
+    const known = narrator
+      ? isVoiceReady(narrator) && story.clonedVoiceId === narrator.id && story.duration
+        ? story.duration
+        : 0
+      : (RENDERS_SYSTEM_VOICE && story.systemVoiceDuration) || 0;
+    const duration = known || estimateDuration(storyText(story));
+    return { time: finished ? 0 : rescaleTime(position, durationRef.current, duration), duration };
+  };
 
   const clearNativeResync = () => {
     if (!nativeResyncRef.current) return;
@@ -241,31 +285,46 @@ export const useStoryPlayer = ({
   const haltSpeech = () => {
     cancelEndHold();
     shouldPlayRef.current = false;
-    if (playbackSourceRef.current === 'preparing') cancelServerRead();
+    if (playbackSourceRef.current === 'preparing') {
+      cancelServerRead();
+      cancelSpeechRender();
+    }
     setSource('idle');
     safePause();
     stopSpeech();
   };
 
+  /** A story's System Voice file request: the engine's input-size slices and its locale. */
+  const systemVoiceRequest = (story: Story) =>
+    [speechParts(storyText(story)), languageToLocale(resolveLanguage(story))] as const;
+
   /**
    * Background start of the next playlist story in the current narrator, so it is ready sooner.
    * The server only reads the first part ahead, and drops it when another story starts.
+   * System Voice (also while a narrator is not ready yet): Android writes the next file ahead.
    */
   const prepareAhead = (story: Story) => {
     const narrator = voices.find((voice) => voice.id === defaultNarratorIdRef.current);
-    if (!narrator || !canClone(narrator) || !isVoiceReady(narrator)) return;
+    const narratorId = narrator && canClone(narrator) && isVoiceReady(narrator) ? narrator.id : '';
+    const usesSystemVoice =
+      RENDERS_SYSTEM_VOICE && (!narrator || (canClone(narrator) && !isVoiceReady(narrator)));
+    if (!narratorId && !usesSystemVoice) return;
 
     const list = storiesRef.current;
     const index = list.findIndex((item) => item.id === story.id);
     if (index < 0 || list.length < 2) return;
     const next = list[(index + 1) % list.length];
-    prefetchStory({ text: storyText(next), language: resolveLanguage(next), voiceId: narrator.id });
+    if (narratorId) {
+      prefetchStory({ text: storyText(next), language: resolveLanguage(next), voiceId: narratorId });
+    } else {
+      prefetchSpeech(...systemVoiceRequest(next));
+    }
   };
 
   const speakWithDevice = (story: Story, time: number, speakId: number) => {
     setSource('device');
     const words = (story.script || story.title).trim().split(/\s+/).filter(Boolean);
-    const wordIndex = Math.max(0, Math.min(Math.floor(time * (22 / 10)), words.length));
+    const wordIndex = Math.max(0, Math.min(Math.floor(time * WORDS_PER_SECOND), words.length));
     const remaining = words.slice(wordIndex).join(' ');
     if (!remaining) {
       onStoryEndedRef.current();
@@ -329,12 +388,14 @@ export const useStoryPlayer = ({
       return;
     }
     pendingStartRef.current = start;
+    pendingStartScaleRef.current = trackDuration;
     awaitingPlayRef.current = true;
     // replace() loads synchronously; the status listener below seeks and plays once loaded.
     player.replace(audioUrl);
   };
 
-  /** The narrator file did not load or play (404, network): continue in System Voice. */
+  /** A story track did not load or play (narrator file: 404, network; or a System Voice file):
+   * continue in System Voice. */
   const handleTrackError = (message: string) => {
     const resumeAt = awaitingPlayRef.current ? pendingStartRef.current : currentTimeRef.current;
     awaitingPlayRef.current = false;
@@ -349,10 +410,21 @@ export const useStoryPlayer = ({
       setSource('idle');
       return;
     }
-    if (__DEV__) console.warn('Narrator track failed:', message);
-    showToast('Narrator audio could not play. Playing in System Voice.', 'error');
-    setAudioDuration(estimateDuration(story.script || story.title));
-    speakWithDevice(story, resumeAt, speakIdRef.current);
+    const systemVoiceFile = trackIsSystemVoiceRef.current;
+    trackIsSystemVoiceRef.current = false;
+    if (__DEV__) console.warn(systemVoiceFile ? 'System Voice file failed:' : 'Narrator track failed:', message);
+    showToast(
+      `${systemVoiceFile ? 'Story' : 'Narrator'} audio could not play. Playing in System Voice.`,
+      'error',
+    );
+    // Continues from the same words: the track's time on the System Voice timeline.
+    const estimate = estimateDuration(storyText(story));
+    const fallbackAt = rescaleTime(resumeAt, durationRef.current, estimate);
+    setAudioDuration(estimate);
+    setTime(fallbackAt);
+    // A broken System Voice file goes on in live speech, so it can't fail into itself again.
+    if (systemVoiceFile) speakWithDevice(story, fallbackAt, speakIdRef.current);
+    else playSystemVoice(story, fallbackAt, speakIdRef.current);
   };
 
   /** Called with the player's real length of a narrator track (the server reports none). */
@@ -411,11 +483,66 @@ export const useStoryPlayer = ({
     } catch (error) {
       if (speakId !== speakIdRef.current) return;
       const message = error instanceof Error ? error.message : 'Voice clone failed';
-      showToast(message, 'error');
-      if (!shouldPlayRef.current || storyRef.current?.id !== story.id) return;
-      setAudioDuration(estimateDuration(story.script || story.title));
-      speakWithDevice(story, resumeAt, speakId);
+      const fallback = shouldPlayRef.current && storyRef.current?.id === story.id;
+      // GPU off / server down: System Voice continues from where the story was, not from 0.
+      showToast(
+        fallback ? `${message.replace(/\.$/, '')}. Playing in System Voice.` : message,
+        'error',
+      );
+      if (!fallback) return;
+      const estimate = estimateDuration(storyText(story));
+      const fallbackAt = rescaleTime(resumeAt, durationRef.current, estimate);
+      setAudioDuration(estimate);
+      setTime(fallbackAt);
+      playSystemVoice(story, fallbackAt, speakId);
     }
+  };
+
+  /** System Voice. Android writes the story to one file that Suno's player plays, so headphone
+   * keys reach Suno; live speech where that isn't possible (iOS, an old build, no voice data). */
+  const playSystemVoice = (story: Story, time: number, speakId: number) => {
+    const estimate = estimateDuration(storyText(story));
+    if (!RENDERS_SYSTEM_VOICE) {
+      setAudioDuration(estimate);
+      speakWithDevice(story, time, speakId);
+      return;
+    }
+
+    // `time` is on the current timeline (the saved file length, or the estimate).
+    const from = durationRef.current;
+    const isCurrent = () => speakId === speakIdRef.current && shouldPlayRef.current;
+    setSource('preparing');
+    // The clock stays at the resume point while the file is written; a pause goes back to here.
+    preparingFromRef.current = time;
+    setTime(time);
+    renderSpeech(...systemVoiceRequest(story))
+      .then((speech) => {
+        if (!isCurrent()) return;
+        if (!speech) throw new Error('No System Voice file');
+        if (story.systemVoiceDuration !== speech.duration) {
+          onSystemVoiceDuration?.(story.id, speech.duration);
+          if (storyRef.current?.id === story.id) {
+            storyRef.current = { ...storyRef.current, systemVoiceDuration: speech.duration };
+          }
+        }
+        trackIsSystemVoiceRef.current = true;
+        startClonedPlayback(
+          speech.uri,
+          speech.duration,
+          rescaleTime(time, from, speech.duration),
+          true,
+        );
+        prepareAhead(story);
+      })
+      .catch((error: unknown) => {
+        if (!isCurrent()) return;
+        if (__DEV__) console.warn('System Voice file failed:', error);
+        // No file (voice data missing, engine error): the engine speaks the story live instead.
+        const at = rescaleTime(time, from, estimate);
+        setAudioDuration(estimate);
+        setTime(at);
+        speakWithDevice(story, at, speakId);
+      });
   };
 
   const speakRemaining = (story: Story, time: number) => {
@@ -424,12 +551,13 @@ export const useStoryPlayer = ({
     stopSpeech();
     safePause();
     cancelServerRead();
+    if (playbackSourceRef.current === 'preparing') cancelSpeechRender();
     pendingSaveRef.current = null;
+    trackIsSystemVoiceRef.current = false;
 
     const narrator = resolveNarrator();
     if (!narrator) {
-      setAudioDuration(estimateDuration(story.script || story.title));
-      speakWithDevice(story, time, speakId);
+      playSystemVoice(story, time, speakId);
       return;
     }
 
@@ -449,15 +577,15 @@ export const useStoryPlayer = ({
           : `${narrator.name}'s voice is still being prepared. Playing in System Voice.`,
         narrator.state === 'error' ? 'error' : 'info',
       );
-      setAudioDuration(estimateDuration(story.script || story.title));
-      speakWithDevice(story, time, speakId);
+      playSystemVoice(story, time, speakId);
       return;
     }
 
     setSource('preparing');
-    // The clock shows 0 while preparing; a pause in that time goes back to here (pausePlayback).
+    // The clock stays at the resume point while preparing (no jump to 0); a pause in that time
+    // goes back to here (pausePlayback).
     preparingFromRef.current = time;
-    setTime(0);
+    setTime(time);
     void playClonedAudio(story, narrator, time, speakId);
   };
 
@@ -477,10 +605,13 @@ export const useStoryPlayer = ({
     cancelEndHold();
     endingRef.current = false;
     const estimated = estimateDuration(story.script || story.title);
-    setAudioDuration(story.duration || estimated);
-    const saved = Math.min(story.progress || 0, estimated);
+    // System Voice file (Android): its saved length is the timeline the progress was saved on.
+    const systemLength =
+      RENDERS_SYSTEM_VOICE && !resolveNarrator() ? story.systemVoiceDuration : undefined;
+    setAudioDuration(systemLength || story.duration || estimated);
+    const saved = Math.min(story.progress || 0, systemLength || estimated);
     // A finished story (progress at its end) replays from the start instead of speaking its last words.
-    const finished = saved >= (story.duration || estimated) - 1;
+    const finished = saved >= (systemLength || story.duration || estimated) - 1;
     const startTime = forceStartFromBeginning || finished ? 0 : saved;
     if (__DEV__) {
       console.log('[PLAYLIST] forceStartFromBeginning:', forceStartFromBeginning);
@@ -658,6 +789,33 @@ export const useStoryPlayer = ({
     speakRemaining(story, 0);
   };
 
+  /** Narrator changed mid-story: the new voice (or System Voice, if the GPU is off) continues
+   * from the same point instead of restarting it. */
+  const switchVoiceAt = (story: Story) => {
+    // Before cancelEndHold: a story in its end hold counts as finished.
+    const { time, duration } = positionInNewVoice(story);
+    if (blockedBySleepMode()) {
+      // No start in the sleep window, but the old voice's track is dropped, so the next Play
+      // continues from this point in the new voice.
+      if (playbackSourceRef.current !== 'idle') {
+        speakIdRef.current += 1;
+        haltSpeech();
+      }
+      setIsPlaying(false);
+      setAudioDuration(duration);
+      setTime(time);
+      return;
+    }
+    cancelEndHold();
+    endingRef.current = false;
+    hasStartedRef.current = false;
+    shouldPlayRef.current = true;
+    setIsPlaying(true);
+    setAudioDuration(duration);
+    setTime(time);
+    speakRemaining(story, time);
+  };
+
   /** Playlist wrap: kill the last story's TTS / audio and lifecycle guards before Story 1 starts. */
   const resetPlaylistState = () => {
     speakIdRef.current += 1; // stale onDone / onBoundary / clone callbacks become no-ops
@@ -686,6 +844,7 @@ export const useStoryPlayer = ({
     stopSpeech();
     if (playbackSourceRef.current === 'preparing') {
       cancelServerRead();
+      cancelSpeechRender();
       // Saved progress and the next Play continue from where the story was, not from 0.
       setTime(preparingFromRef.current);
       setSource('idle');
@@ -817,10 +976,13 @@ export const useStoryPlayer = ({
       let start = pendingStartRef.current;
       pendingStartRef.current = 0;
       applyPlayerRate(playbackSpeedRef.current);
-      // Paused at the very end of the real track: the story had finished, so it starts over.
-      if (typeof status.duration === 'number' && status.duration > 0 && start >= status.duration - 0.5) {
-        start = 0;
-        setTime(0);
+      if (typeof status.duration === 'number' && status.duration > 0) {
+        // The resume point was on the estimated / saved length: same point on the real track.
+        start = rescaleTime(start, pendingStartScaleRef.current, status.duration);
+        // Paused at the very end of the real track: the story had finished, so it starts over.
+        if (start >= status.duration - 0.5) start = 0;
+        setAudioDuration(status.duration);
+        setTime(start);
       }
       if (start > 0.4) {
         void player
@@ -926,6 +1088,15 @@ export const useStoryPlayer = ({
     onCommand: handleDeviceMediaCommand,
   });
 
+  // Wired headphone keys while Suno is on screen; same actions as the media card buttons.
+  useMediaKeys({
+    enabled: Boolean(activeStory) && playbackSource !== 'idle',
+    onKey: (key) =>
+      handleDeviceMediaCommand(
+        key === 'playPause' ? { action: isStoryPlaying() ? 'pause' : 'play' } : { action: key },
+      ),
+  });
+
   useEffect(() => {
     if (playbackSource !== 'device' || !isPlaying || !activeStory) return;
 
@@ -994,18 +1165,23 @@ export const useStoryPlayer = ({
     if (mode === 'restart') {
       // Same narrator picked again while it already plays / starts: keep going.
       if (!changed && playbackSourceRef.current !== 'idle' && shouldPlayRef.current) return;
-      restartSpeech(story);
+      switchVoiceAt(story);
       return;
     }
-    if (!changed || playbackSourceRef.current === 'idle') return;
-    if (shouldPlayRef.current) {
-      restartSpeech(story);
+    if (!changed) return;
+    if (playbackSourceRef.current !== 'idle' && shouldPlayRef.current) {
+      switchVoiceAt(story);
       return;
     }
-    // Paused: drop the old voice's track / utterance so Play starts in the new voice.
-    speakIdRef.current += 1;
-    haltSpeech();
-    setTime(0);
+    // Paused / stopped: the next Play continues from the same point in the new voice.
+    const { time, duration } = positionInNewVoice(story);
+    if (playbackSourceRef.current !== 'idle') {
+      // Drop the old voice's track / utterance so Play starts in the new voice.
+      speakIdRef.current += 1;
+      haltSpeech();
+    }
+    setAudioDuration(duration);
+    setTime(time);
   };
 
   const setPlaybackSpeed = (value: number) => {
