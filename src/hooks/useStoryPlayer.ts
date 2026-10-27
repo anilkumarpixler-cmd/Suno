@@ -120,6 +120,9 @@ export const useStoryPlayer = ({
   const [defaultNarratorId, setDefaultNarratorIdState] = useState('');
   // True from the first server track until playback goes idle / falls back to device speech.
   const [hasServerSession, setHasServerSession] = useState(false);
+  // The narrator heard in the current story ('' = System Voice: the default wasn't ready, or it
+  // fell back). Saved at play time, so a clone finishing mid-story doesn't change the card.
+  const [playingVoiceId, setPlayingVoiceId] = useState('');
 
   const player = useAudioPlayer(null, { updateInterval: 250 });
 
@@ -254,6 +257,10 @@ export const useStoryPlayer = ({
    * so Suno holds the audio and the next app that plays pauses it. Only for a paused or new
    * track: it pauses every playing player. */
   const playWithFreshFocus = async () => {
+    // The play starts here, not after the focus calls below: a paused status in between (a new
+    // track loads paused) must not read as another app pausing the story.
+    clearNativeResync();
+    lastJsCommandAtRef.current = Date.now();
     if (Platform.OS === 'android') {
       try {
         await setIsAudioActiveAsync(false);
@@ -377,6 +384,9 @@ export const useStoryPlayer = ({
       resumeAt > 0.4 && (!durationKnown || resumeAt < trackDuration - 0.5) ? resumeAt : 0;
     hasStartedRef.current = false;
     setTime(start);
+    // The new track's first statuses come from JS's own load, not from a native pause.
+    clearNativeResync();
+    lastJsCommandAtRef.current = Date.now();
     if (start === 0) {
       // Play at once: ExoPlayer starts the moment enough audio is buffered, instead of after
       // the next "loaded" status event (up to one update interval later).
@@ -501,6 +511,7 @@ export const useStoryPlayer = ({
   /** System Voice. Android writes the story to one file that Suno's player plays, so headphone
    * keys reach Suno; live speech where that isn't possible (iOS, an old build, no voice data). */
   const playSystemVoice = (story: Story, time: number, speakId: number) => {
+    setPlayingVoiceId('');
     const estimate = estimateDuration(storyText(story));
     if (!RENDERS_SYSTEM_VOICE) {
       setAudioDuration(estimate);
@@ -556,6 +567,8 @@ export const useStoryPlayer = ({
     trackIsSystemVoiceRef.current = false;
 
     const narrator = resolveNarrator();
+    // Cloned and ready: the narrator plays; otherwise System Voice, and the card says so.
+    setPlayingVoiceId(narrator && canClone(narrator) && isVoiceReady(narrator) ? narrator.id : '');
     if (!narrator) {
       playSystemVoice(story, time, speakId);
       return;
@@ -1000,7 +1013,9 @@ export const useStoryPlayer = ({
     if (status.didJustFinish && !hasStartedRef.current) return;
     if (typeof status.currentTime === 'number') {
       setTime(status.currentTime);
-      if (status.currentTime > 0.15) hasStartedRef.current = true;
+      // Only real playback: the seek to a resume point before play() is not a start, else the
+      // still-paused new track reads as a native pause and the play is dropped.
+      if (status.playing && status.currentTime > 0.15) hasStartedRef.current = true;
     }
     // The server reports no length: the player's is the real one, saved with the story once.
     if (typeof status.duration === 'number' && status.duration > 0) {
@@ -1019,6 +1034,12 @@ export const useStoryPlayer = ({
   });
 
 
+  /** The voice heard (undefined = System Voice); nothing loaded: the default, which Play uses. */
+  const playingNarrator =
+    playbackSource === 'idle'
+      ? resolveNarrator()
+      : voices.find((voice) => voice.id === playingVoiceId);
+
   // iOS native media card: stays up while the next story is prepared after a server track,
   // so auto-next / previous update it in place instead of dropping it. Android: see below.
   useLockScreenControls(player, {
@@ -1026,7 +1047,7 @@ export const useStoryPlayer = ({
       Boolean(activeStory) &&
       (playbackSource === 'server' || (playbackSource === 'preparing' && hasServerSession)),
     story: activeStory,
-    narratorName: activeStory ? resolveNarrator()?.name : undefined,
+    narratorName: activeStory ? playingNarrator?.name : undefined,
   });
 
   /** Buttons on the Android card, headset keys, audio focus and headphone unplug. */
@@ -1075,7 +1096,7 @@ export const useStoryPlayer = ({
   useDeviceMediaSession({
     active: Boolean(activeStory) && playbackSource !== 'idle',
     story: activeStory,
-    narratorName: activeStory ? resolveNarrator()?.name : undefined,
+    narratorName: activeStory ? playingNarrator?.name : undefined,
     // The play intent, as on the in-app buttons: not the native player's flag, which drops on
     // every buffer and between stories (the card flickered). Native pauses (another app took
     // the audio) still reach it through the status sync below.
@@ -1221,6 +1242,7 @@ export const useStoryPlayer = ({
     restartSpeech,
     defaultNarratorId,
     setDefaultNarrator,
+    playingNarrator,
     sleepMode: sleep.sleepMode,
     saveSleepMode: sleep.saveSleepMode,
   };

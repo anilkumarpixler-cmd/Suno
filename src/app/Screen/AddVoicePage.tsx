@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import {
   RecordingPresets,
   requestRecordingPermissionsAsync,
@@ -317,7 +318,11 @@ export const AddVoiceScreen: React.FC = () => {
               accessibilityState={{ expanded: isLangOpen }}
             >
               <Text style={styles.dropdownValue}>{selectedLang}</Text>
-              <Text style={styles.chevron}>{isLangOpen ? '⌃' : '⌄'}</Text>
+              <MaterialIcons
+                name={isLangOpen ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
+                size={24}
+                color={colors.textMuted}
+              />
             </Pressable>
             {isLangOpen && (
               <View style={styles.dropdownMenu}>
@@ -340,7 +345,7 @@ export const AddVoiceScreen: React.FC = () => {
 
         <View style={styles.recorderBox}>
           <View style={styles.micCircle}>
-            <Text style={styles.micIcon}>🎙️</Text>
+            <MaterialIcons name="mic" size={28} color={colors.primary} />
           </View>
           <Text style={styles.recTitle}>
             {isRecording ? 'Recording Voice...' : isRecorded ? 'Voice Recorded' : 'Record your voice'}
@@ -377,7 +382,12 @@ export const AddVoiceScreen: React.FC = () => {
                 <Text style={styles.secondaryText}>Retake</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.playBtn} onPress={handlePreview}>
-                <Text style={styles.playText}>{isPreviewing ? 'Pause' : '▶ Preview'}</Text>
+                <MaterialIcons
+                  name={isPreviewing ? 'pause' : 'play-arrow'}
+                  size={20}
+                  color={colors.textDark}
+                />
+                <Text style={styles.playText}>{isPreviewing ? 'Pause' : 'Preview'}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.saveBtn, (isSaving || nameTaken) && styles.disabledBtn]}
@@ -391,7 +401,10 @@ export const AddVoiceScreen: React.FC = () => {
         </View>
 
         <View style={styles.privacyCard}>
-          <Text style={styles.privacyTitle}>🔒 Privacy first</Text>
+          <View style={styles.privacyTitleRow}>
+            <MaterialIcons name="lock" size={18} color={colors.textDark} />
+            <Text style={styles.privacyTitle}>Privacy first</Text>
+          </View>
           <Text style={styles.privacySub}>
             Your voice data is encrypted and completely private. It is only used to generate stories for your family and can be deleted anytime.
           </Text>
@@ -458,12 +471,6 @@ const makeStyles = (colors: ThemeColors) => ({
     justifyContent: 'space-between' as const,
   },
   dropdownValue: { ...theme.typography.body, color: colors.textDark },
-  chevron: {
-    color: colors.textMuted,
-    fontSize: 22,
-    lineHeight: 18,
-    marginTop: -5,
-  },
   dropdownMenu: {
     position: 'absolute' as const,
     top: 58,
@@ -506,7 +513,6 @@ const makeStyles = (colors: ThemeColors) => ({
     justifyContent: 'center' as const,
     marginBottom: 12,
   },
-  micIcon: { fontSize: 24 },
   recTitle: { ...theme.typography.cardTitle, color: colors.textDark },
   recSub: { ...theme.typography.caption, color: colors.textMuted, textAlign: 'center' as const, marginTop: 4, marginBottom: 16 },
   timerText: { ...theme.typography.hero, fontSize: 24, lineHeight: 30, color: colors.primary, marginBottom: 12 },
@@ -528,6 +534,9 @@ const makeStyles = (colors: ThemeColors) => ({
   secondaryBtn: { padding: 12 },
   secondaryText: { ...theme.typography.section, color: colors.textMuted },
   playBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
     backgroundColor: colors.pillBg,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -537,6 +546,7 @@ const makeStyles = (colors: ThemeColors) => ({
   saveBtn: { backgroundColor: colors.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
   saveText: { ...theme.typography.section, color: colors.onPrimary },
   privacyCard: { backgroundColor: colors.cardBg, padding: spacing.md, borderRadius: 16 },
+  privacyTitleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6 },
   privacyTitle: { ...theme.typography.section, color: colors.textDark },
   privacySub: { ...theme.typography.caption, color: colors.textMuted, marginTop: 4 },
 });

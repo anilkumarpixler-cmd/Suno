@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Common/header';
 import { StoryCard } from '@/components/Common/Home/StoryCart';
@@ -20,7 +21,7 @@ const matchesQuery = (story: Story, query: string) =>
   (story.childName ? normalize(story.childName).includes(query) : false);
 
 export const SearchScreen: React.FC = () => {
-  const { stories, defaultNarrator, playStory, setCurrentScreen } = useApp();
+  const { stories, playingNarrator, playStory, setCurrentScreen } = useApp();
   const { colors } = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const [query, setQuery] = useState('');
@@ -58,7 +59,7 @@ export const SearchScreen: React.FC = () => {
       <Header title="Search" showBack onBack={() => setCurrentScreen('Home')} />
 
       <View style={styles.searchBox}>
-        <Text style={styles.searchIcon}>🔍</Text>
+        <MaterialIcons name="search" size={22} color={colors.textMuted} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           value={query}
@@ -78,7 +79,7 @@ export const SearchScreen: React.FC = () => {
             onPress={() => setQuery('')}
             accessibilityRole="button"
             accessibilityLabel="Clear search">
-            <Text style={styles.clearIcon}>✕</Text>
+            <MaterialIcons name="close" size={20} color={colors.textMuted} />
           </Pressable>
         )}
       </View>
@@ -111,7 +112,12 @@ export const SearchScreen: React.FC = () => {
                     onPress={() => setQuery(item)}
                     accessibilityRole="button"
                     accessibilityLabel={`Search ${item}`}>
-                    <Text style={styles.historyIcon}>🕘</Text>
+                    <MaterialIcons
+                      name="history"
+                      size={20}
+                      color={colors.textMuted}
+                      style={styles.historyIcon}
+                    />
                     <Text style={styles.historyText} numberOfLines={1}>
                       {item}
                     </Text>
@@ -143,7 +149,7 @@ export const SearchScreen: React.FC = () => {
         renderItem={({ item: story }) => (
           <StoryCard
             story={story}
-            narrator={defaultNarrator}
+            narrator={playingNarrator}
             onPress={() => {
               rememberQuery();
               playStory(story, true);
@@ -171,7 +177,7 @@ const makeStyles = (colors: ThemeColors) => ({
     borderColor: colors.borderLight,
     backgroundColor: colors.cardBg,
   },
-  searchIcon: { fontSize: 16, marginRight: 8 },
+  searchIcon: { marginRight: 8 },
   searchInput: {
     flex: 1,
     paddingVertical: 13,
@@ -184,7 +190,6 @@ const makeStyles = (colors: ThemeColors) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  clearIcon: { ...theme.typography.section, color: colors.textMuted },
   sectionTitle: { ...theme.typography.section, color: colors.textDark, marginBottom: spacing.sm },
   history: { marginBottom: spacing.md },
   historyHeader: {
@@ -200,7 +205,7 @@ const makeStyles = (colors: ThemeColors) => ({
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
   },
-  historyIcon: { fontSize: 14, marginRight: 10 },
+  historyIcon: { marginRight: 10 },
   historyText: { flex: 1, ...theme.typography.body, color: colors.textMuted },
   // Extra bottom space so the last story clears the mini player.
   list: { padding: spacing.md, paddingBottom: 140, flexGrow: 1 },

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '@/Context/AppContext';
 import { CustomDropdown } from '@/components/Common/CustomDropdown';
@@ -107,6 +108,7 @@ const LanguageSelector: React.FC<{
 export const CreateStoryScreen: React.FC = () => {
   const { child, voices, stories, defaultNarratorId, createNewStory, setCurrentScreen } = useApp();
   const styles = useThemedStyles(makeStyles);
+  const { colors } = useAppTheme();
   const [childName, setChildName] = useState(child.name || 'Aarav');
   const [age, setAge] = useState('3 years');
   const [language, setLanguage] = useState<StoryLanguage>('Hindi');
@@ -200,7 +202,7 @@ export const CreateStoryScreen: React.FC = () => {
           style={styles.backButton}
           onPress={() => setCurrentScreen('Home')}
           accessibilityLabel="Go back">
-          <Text style={styles.backArrow}>‹</Text>
+          <MaterialIcons name="chevron-left" size={32} color={colors.textDark} />
         </Pressable>
         <Text style={styles.headerTitle}> Create a Story</Text>
         <View style={styles.headerSpacer} />
@@ -302,7 +304,8 @@ export const CreateStoryScreen: React.FC = () => {
             style={styles.createButton}
             onPress={handleCreateStory}
             accessibilityRole="button">
-            <Text style={styles.createButtonText}>✨ Create personalized story</Text>
+            <MaterialIcons name="auto-awesome" size={20} color={colors.onPrimary} />
+            <Text style={styles.createButtonText}>Create personalized story</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -335,13 +338,7 @@ const makeStyles = (colors: ThemeColors) => ({
     alignItems: 'flex-start' as const,
     justifyContent: 'center' as const,
   },
-  backArrow: {
-    color: colors.textDark,
-    fontSize: 34,
-    fontWeight: '300' as const,
-    lineHeight: 36,
-  },
-  headerTitle: { color: colors.textDark, ...theme.typography.cardTitle },
+  headerTitle: { color: colors.textDark, ...theme.typography.screenTitle },
   headerSpacer: { width: 36 },
   // Extra bottom space so the Create button clears the mini player.
   content: { paddingHorizontal: 16, paddingTop: 28, paddingBottom: 140 },
@@ -403,6 +400,8 @@ const makeStyles = (colors: ThemeColors) => ({
     backgroundColor: colors.primary,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
+    flexDirection: 'row' as const,
+    gap: 8,
   },
   createButtonText: { ...theme.typography.section, color: colors.onPrimary },
 });

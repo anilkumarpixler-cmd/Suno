@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { View, Text, Pressable, Modal } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import Animated, {
   cancelAnimation,
   useAnimatedStyle,
@@ -8,7 +9,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { theme, ThemeColors } from '../Theme/Index';
-import { useThemedStyles } from '../Theme/ThemeProvider';
+import { useAppTheme, useThemedStyles } from '../Theme/ThemeProvider';
 
 type PreviewModalProps = {
   handlePlayPreview: () => void;
@@ -27,6 +28,7 @@ export const PreviewModal = ({
   isPlaying,
 }: PreviewModalProps) => {
   const styles = useThemedStyles(makeStyles);
+  const { colors } = useAppTheme();
   const scale = useSharedValue(1);
 
   useEffect(() => {
@@ -60,9 +62,12 @@ export const PreviewModal = ({
               onPress={handlePlayPreview}
               accessibilityRole="button"
               accessibilityLabel={isPlaying ? 'Playing' : 'Play preview'}>
-              <Text style={styles.previewButtonText}>
-                {isPlaying ? 'Playing…' : '▶ Play'}
-              </Text>
+              <MaterialIcons
+                name={isPlaying ? 'graphic-eq' : 'play-arrow'}
+                size={22}
+                color={colors.onPrimary}
+              />
+              <Text style={styles.previewButtonText}>{isPlaying ? 'Playing…' : 'Play'}</Text>
             </Pressable>
           </Animated.View>
 
@@ -71,7 +76,8 @@ export const PreviewModal = ({
             onPress={handleStopPreview}
             accessibilityRole="button"
             accessibilityLabel="Stop preview">
-            <Text style={styles.previewStopText}>■ Stop</Text>
+            <MaterialIcons name="stop" size={22} color={colors.textDark} />
+            <Text style={styles.previewStopText}>Stop</Text>
           </Pressable>
 
           <Pressable style={styles.previewCloseButton} onPress={() => setPreviewUri(null)}>
@@ -120,6 +126,9 @@ const makeStyles = (colors: ThemeColors) => ({
     width: '100%' as const,
     paddingVertical: 14,
     alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    flexDirection: 'row' as const,
+    gap: 6,
   },
   previewButtonText: {
     ...theme.typography.section,
@@ -133,6 +142,9 @@ const makeStyles = (colors: ThemeColors) => ({
     borderWidth: 1,
     borderColor: colors.borderLight,
     alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    flexDirection: 'row' as const,
+    gap: 6,
     marginBottom: 12,
   },
   previewStopText: {

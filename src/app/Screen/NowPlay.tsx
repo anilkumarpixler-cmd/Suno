@@ -36,7 +36,7 @@ export const NowPlayingScreen: React.FC = () => {
     playNextStory,
     playPreviousStory,
     toggleFavorite,
-    defaultNarrator: narrator,
+    playingNarrator: narrator,
     duration: trackDuration,
     setCurrentScreen,
     openNarratorPicker,
@@ -226,7 +226,7 @@ export const NowPlayingScreen: React.FC = () => {
               style={styles.ctrlBtn}
               onPress={() => playPreviousStory()}
               accessibilityLabel="Previous story">
-              <Text style={styles.ctrlIcon}>⏮</Text>
+              <MaterialIcons name="skip-previous" size={30} color={colors.playerText} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.ctrlBtn}
@@ -260,7 +260,7 @@ export const NowPlayingScreen: React.FC = () => {
               style={styles.ctrlBtn}
               onPress={() => playNextStory()}
               accessibilityLabel="Next story">
-              <Text style={styles.ctrlIcon}>⏭</Text>
+              <MaterialIcons name="skip-next" size={30} color={colors.playerText} />
             </TouchableOpacity>
             <View style={styles.speedWrap}>
               <TouchableOpacity
@@ -456,7 +456,6 @@ const makeStyles = (colors: ThemeColors) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  ctrlIcon: { fontSize: 22, color: colors.playerText },
   mainPlayBtn: {
     width: 72,
     height: 72,

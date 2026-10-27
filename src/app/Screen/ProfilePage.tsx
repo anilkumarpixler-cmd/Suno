@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Common/header';
 import { showToast } from '@/components/Common/Toast';
@@ -11,22 +12,29 @@ import { RootScreen } from '@/Types';
 
 export type SettingIcon = 'globe' | 'moon' | 'microphone' | 'lock' | 'sun' | 'device';
 
+const SETTING_ICONS: Record<SettingIcon, keyof typeof MaterialIcons.glyphMap> = {
+  globe: 'language',
+  moon: 'dark-mode',
+  sun: 'light-mode',
+  microphone: 'mic',
+  lock: 'lock',
+  device: 'smartphone',
+};
+
+const YELLOW_ICON = '#F5C84B';
+
 export const IconContainer: React.FC<{ icon: SettingIcon }> = ({ icon }) => {
   const styles = useThemedStyles(makeStyles);
-  const iconContent = {
-    globe: '⊕',
-    moon: '☾',
-    sun: '☼',
-    microphone: '♩',
-    lock: '▣',
-    device: '◐',
-  }[icon];
+  const { colors } = useAppTheme();
+  const isYellow = icon === 'moon' || icon === 'lock' || icon === 'sun';
 
   return (
     <View style={styles.iconContainer} accessible accessibilityLabel={`${icon} icon`}>
-      <Text style={[styles.settingIcon, icon === 'moon' || icon === 'lock' || icon === 'sun' ? styles.yellowIcon : null]}>
-        {iconContent}
-      </Text>
+      <MaterialIcons
+        name={SETTING_ICONS[icon]}
+        size={26}
+        color={isYellow ? YELLOW_ICON : colors.textDark}
+      />
     </View>
   );
 };
@@ -40,6 +48,7 @@ interface ProfileCardProps {
 
 export const ProfileCard: React.FC<ProfileCardProps> = ({ name, age, avatar, onEdit }) => {
   const styles = useThemedStyles(makeStyles);
+  const { colors } = useAppTheme();
   return (
     <View style={styles.profileCard}>
       <View style={styles.avatarCircle}>
@@ -54,7 +63,7 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ name, age, avatar, onE
         onPress={onEdit}
         accessibilityRole="button"
         accessibilityLabel="Edit profile">
-        <Text style={styles.editIcon}>✎</Text>
+        <MaterialIcons name="edit" size={22} color={colors.textDark} />
       </Pressable>
     </View>
   );
@@ -74,6 +83,7 @@ interface SettingsCardProps {
 
 export const SettingsCard: React.FC<SettingsCardProps> = ({ title, subtitle, icon, onPress }) => {
   const styles = useThemedStyles(makeStyles);
+  const { colors } = useAppTheme();
   return (
     <Pressable
       style={styles.settingsCard}
@@ -85,7 +95,7 @@ export const SettingsCard: React.FC<SettingsCardProps> = ({ title, subtitle, ico
         <Text style={styles.settingTitle}>{title}</Text>
         <Text style={styles.settingSubtitle}>{subtitle}</Text>
       </View>
-      <Text style={styles.chevron}>›</Text>
+      <MaterialIcons name="chevron-right" size={26} color={colors.textDark} style={styles.chevron} />
     </Pressable>
   );
 };
@@ -220,7 +230,6 @@ const makeStyles = (colors: ThemeColors) => ({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  editIcon: { color: colors.textDark, fontSize: 21 },
   sectionTitle: {
     color: colors.textDark,
     ...theme.typography.section,
@@ -246,12 +255,10 @@ const makeStyles = (colors: ThemeColors) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  settingIcon: { color: colors.textDark, fontSize: 29, lineHeight: 32 },
-  yellowIcon: { color: '#F5C84B' },
   settingDetails: { flex: 1, marginLeft: 16 },
   settingTitle: { ...theme.typography.section, color: colors.textDark },
   settingSubtitle: { ...theme.typography.body, color: colors.textMuted, marginTop: 4 },
-  chevron: { color: colors.textDark, fontSize: 25, fontWeight: '300' as const, marginLeft: 10 },
+  chevron: { marginLeft: 10 },
   placeholder: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, padding: 20 },
   placeholderTitle: { ...theme.typography.cardTitle, color: colors.textDark },
   placeholderText: { ...theme.typography.body, color: colors.textMuted, marginTop: 8 },

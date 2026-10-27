@@ -56,6 +56,8 @@ type AppContextType = {
   /** Global narrator for every story ('' = System Voice), persisted across restarts. */
   defaultNarratorId: string;
   defaultNarrator: Voice | undefined;
+  /** The narrator actually heard; undefined = System Voice (also when the default fell back). */
+  playingNarrator: Voice | undefined;
   setDefaultVoice: (voiceId: string) => void;
   addVoice: (name: string, languages: string[], audioUri?: string) => Promise<void>;
   deleteVoice: (voiceId: string) => Promise<void>;
@@ -154,6 +156,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     playPreviousStory,
     defaultNarratorId,
     setDefaultNarrator,
+    playingNarrator,
     playbackSpeed,
     setPlaybackSpeed,
     sleepMode,
@@ -327,20 +330,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (voiceId === defaultNarratorId) setDefaultNarrator('');
   };
 
-  const toggleFavorite = (storyId: string) => {
+  const toggleFavorite = (storyId: string) =>{
     const story = stories.find((item) => item.id === storyId);
+    if (!story) return;
+    const newFavoriteStatus = !story.isFavorite;
     markTouched(storyId, ['isFavorite']);
-    if (story) void updateStory(storyId, { isFavorite: !story.isFavorite });
+    void updateStory(storyId, { isFavorite: newFavoriteStatus });
     setStories((prev) =>
-      prev.map((item) => (item.id === storyId ? { ...item, isFavorite: !item.isFavorite } : item))
+      prev.map((item) => (item.id === storyId ? { ...item, isFavorite: newFavoriteStatus } : item))
     );
     setActiveStory((currentStory) =>
       currentStory?.id === storyId
-        ? { ...currentStory, isFavorite: !currentStory.isFavorite }
+        ? { ...currentStory, isFavorite: newFavoriteStatus }
         : currentStory
     );
-  };
-
+  }
+  
   const deleteStory = (storyId: string) => {
     if (activeStory?.id === storyId) {
       pausePlayback();
@@ -417,6 +422,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         playPreviousStory,
         defaultNarratorId,
         defaultNarrator,
+        playingNarrator,
         setDefaultVoice,
         addVoice,
         deleteVoice,

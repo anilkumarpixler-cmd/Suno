@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { FlatList, View, ScrollView, Text, TouchableOpacity } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '@/Context/AppContext';
 import { Header } from '@/components/Common/header';
@@ -16,13 +17,13 @@ export const HomeScreen: React.FC = () => {
   const {
     child,
     stories,
-    defaultNarrator,
+    playingNarrator,
     playStory,
     setCurrentScreen,
     lastPlayedStoryId,
     deleteStory,
   } = useApp();
-  const { gradients } = useAppTheme();
+  const { gradients, colors } = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const [selectedCategory, setSelectedCategory] = useState<Category>('All');
   const [pendingDelete, setPendingDelete] = useState<Story | null>(null);
@@ -42,10 +43,10 @@ export const HomeScreen: React.FC = () => {
   };
 
   // One pill per Create story type, plus Adventure for the built-in and older stories.
-  const categories: { label: Category; icon?: string }[] = [
+  const categories: { label: Category; icon?: keyof typeof MaterialIcons.glyphMap }[] = [
     { label: 'All' },
     ...STORY_TYPES.map((type) => ({ label: type.category, icon: type.icon })),
-    { label: 'Adventure', icon: '🚀' },
+    { label: 'Adventure', icon: 'rocket-launch' },
   ];
 
   const continueStory = lastPlayedStoryId
@@ -83,7 +84,7 @@ export const HomeScreen: React.FC = () => {
                   Listen to magical tales narrated by Mummy, Papa, Nani, or Dada's voice.
                 </Text>
               </View>
-              <Text style={styles.heroEmoji}>📚</Text>
+              <MaterialIcons name="auto-stories" size={80} color={colors.primary} />
             </LinearGradient>
 
             <View style={styles.sectionHeader}>
@@ -94,7 +95,8 @@ export const HomeScreen: React.FC = () => {
                 style={styles.createStoryButton}
                 onPress={() => setCurrentScreen('Create')}
               >
-                <Text style={styles.createStoryIcon}>+ Create</Text>
+                <MaterialIcons name="add" size={22} color={colors.primary} />
+                <Text style={styles.createStoryText}>Create</Text>
               </TouchableOpacity>
             </View>
 
@@ -107,8 +109,15 @@ export const HomeScreen: React.FC = () => {
                     style={[styles.pill, isActive && styles.activePill]}
                     onPress={() => setSelectedCategory(cat.label)}
                   >
+                    {cat.icon ? (
+                      <MaterialIcons
+                        name={cat.icon}
+                        size={18}
+                        color={isActive ? colors.onPrimary : colors.textDark}
+                      />
+                    ) : null}
                     <Text style={[styles.pillText, isActive && styles.activePillText]}>
-                      {cat.icon ? `${cat.icon} ` : ''}{cat.label}
+                      {cat.label}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -121,7 +130,7 @@ export const HomeScreen: React.FC = () => {
                 <StoryCard
                   story={continueStory}
                   variant="continue"
-                  narrator={defaultNarrator}
+                  narrator={playingNarrator}
                   onPress={() => playStory(continueStory, true)}
                   onRemove={() => openDelete(continueStory)}
                   removeLabel={`Delete ${continueStory.title}`}
@@ -146,7 +155,7 @@ export const HomeScreen: React.FC = () => {
         renderItem={({ item: story }) => (
           <StoryCard
             story={story}
-            narrator={defaultNarrator}
+            narrator={playingNarrator}
             onPress={() => playStory(story, true)}
             onRemove={() => openDelete(story)}
             removeLabel={`Delete ${story.title}`}
@@ -190,7 +199,6 @@ const makeStyles = (colors: ThemeColors) => ({
   heroTextContainer: { flex: 1, marginRight: spacing.sm },
   heroTitle: { ...theme.typography.hero, color: colors.textDark, marginBottom: 8 },
   heroSub: { ...theme.typography.body, color: colors.textMuted },
-  heroEmoji: { fontSize: 49, lineHeight: 60 },
   sectionHeader: {
     marginBottom: spacing.sm,
     flexDirection: 'row' as const,
@@ -201,8 +209,11 @@ const makeStyles = (colors: ThemeColors) => ({
   createStoryButton: {
     paddingVertical: spacing.xs,
     paddingLeft: spacing.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 2,
   },
-  createStoryIcon: {
+  createStoryText: {
     color: colors.primary,
     fontSize: 21,
     lineHeight: 20,
@@ -218,6 +229,9 @@ const makeStyles = (colors: ThemeColors) => ({
     borderRadius: borderRadius.pill,
     backgroundColor: colors.pillBg,
     marginRight: 8,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
   },
   activePill: { backgroundColor: colors.primary },
   // Same size selected or not, so the row doesn't shift when a category is picked.

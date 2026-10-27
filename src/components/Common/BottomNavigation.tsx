@@ -1,9 +1,10 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootScreen } from '../../Types';
 import { theme, ThemeColors } from '../../Theme/Index';
-import { useThemedStyles } from '../../Theme/ThemeProvider';
+import { useAppTheme, useThemedStyles } from '../../Theme/ThemeProvider';
 
 // Icon + label row, above the bottom gap.
 const TAB_ROW_HEIGHT = 52;
@@ -22,16 +23,17 @@ interface BottomNavProps {
 
 export const BottomNavigation: React.FC<BottomNavProps> = ({ activeScreen, onSelectTab }) => {
   const styles = useThemedStyles(makeStyles);
+  const { colors } = useAppTheme();
   // Edge-to-edge: the phone's nav bar (3-button, gesture line, iPhone home indicator) draws over
   // the app. The bar's background runs under it; the tabs sit just above it. 0 when there is none.
   const { bottom } = useSafeAreaInsets();
   const bottomGap = bottomGapFor(bottom);
-  const tabs: { key: RootScreen; label: string; icon: string }[] = [
-    { key: 'Home', label: 'Home', icon: '🏠' },
-    { key: 'Search', label: 'Search', icon: '🔍' },
-    { key: 'Voices', label: 'Voices', icon: '🎙️' },
-    { key: 'Create', label: 'Create', icon: '✨' },
-    { key: 'Profile', label: 'Profile', icon: '👤' },
+  const tabs: { key: RootScreen; label: string; icon: keyof typeof MaterialIcons.glyphMap }[] = [
+    { key: 'Home', label: 'Home', icon: 'home' },
+    { key: 'Search', label: 'Search', icon: 'search' },
+    { key: 'Voices', label: 'Voices', icon: 'mic' },
+    { key: 'Create', label: 'Create', icon: 'auto-awesome' },
+    { key: 'Profile', label: 'Profile', icon: 'person' },
   ];
 
   return (
@@ -45,7 +47,11 @@ export const BottomNavigation: React.FC<BottomNavProps> = ({ activeScreen, onSel
             style={styles.tab}
             onPress={() => onSelectTab(tab.key)}
           >
-            <Text style={styles.icon}>{tab.icon}</Text>
+            <MaterialIcons
+              name={tab.icon}
+              size={24}
+              color={isActive ? colors.primary : colors.textMuted}
+            />
             <Text style={[styles.label, isActive && styles.activeLabel]}>{tab.label}</Text>
           </TouchableOpacity>
         );
@@ -65,9 +71,6 @@ const makeStyles = (colors: ThemeColors) => ({
     flex: 1,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-  },
-  icon: {
-    fontSize: 20,
   },
   label: {
     ...theme.typography.caption,

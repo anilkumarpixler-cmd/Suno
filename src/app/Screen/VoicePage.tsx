@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, View, Text } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp } from '@/Context/AppContext';
@@ -20,12 +21,24 @@ interface VoiceCardProps {
   onDeleteVoice: (voiceId: string) => void;
 }
 
+const PREPARING_COLOR = '#F5C84B';
+
 /** Ready only once the voice is cloned and loaded on the GPU, not when the recording is saved. */
-const voiceStateLabel = (voice: Voice) => {
-  if (!voice.state) return voice.status;
-  if (voice.state === 'ready') return '🟢 Voice ready';
-  if (voice.state === 'error') return '🔴 Voice failed';
-  return '🟡 Preparing voice…';
+const VoiceStateLabel: React.FC<{ voice: Voice }> = ({ voice }) => {
+  const { colors } = useAppTheme();
+  if (!voice.state) return <>{voice.status}</>;
+  const [icon, color, label]: [keyof typeof MaterialIcons.glyphMap, string, string] =
+    voice.state === 'ready'
+      ? ['check-circle', colors.success, 'Voice ready']
+      : voice.state === 'error'
+        ? ['error', colors.danger, 'Voice failed']
+        : ['hourglass-top', PREPARING_COLOR, 'Preparing voice…'];
+  // Nested in the meta line's Text, so it wraps with the rest of the line.
+  return (
+    <>
+      <MaterialIcons name={icon} size={14} color={color} /> {label}
+    </>
+  );
 };
 
 const VoiceCard: React.FC<VoiceCardProps> = ({
@@ -36,6 +49,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
   onDeleteVoice,
 }) => {
   const styles = useThemedStyles(makeStyles);
+  const { colors } = useAppTheme();
   const failed = voice.state === 'error';
   return (
   <View style={styles.voiceCard}>
@@ -47,7 +61,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
         <Text style={styles.voiceName}>{voice.name}</Text>
         <Text style={styles.metaText}>
           {voice.languages.join(' · ')} · {isSelected ? 'Default · ' : ''}
-          {voiceStateLabel(voice)}
+          <VoiceStateLabel voice={voice} />
         </Text>
         {failed && voice.stateError ? (
           <Text style={styles.metaText} numberOfLines={2}>
@@ -57,7 +71,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
       </View>
       {isSelected && (
         <View style={styles.defaultStatus} accessibilityLabel={`${voice.name} selected`}>
-          <Text style={styles.checkMark}>✓</Text>
+          <MaterialIcons name="check" size={18} color={colors.onPrimary} />
         </View>
       )}
     </View>
@@ -68,7 +82,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
         onPress={() => onPreviewVoice(voice)}
         accessibilityRole="button"
         accessibilityLabel={`Preview ${voice.name}`}>
-        <Text style={styles.playIcon}>▶</Text>
+        <MaterialIcons name="play-arrow" size={22} color={colors.textDark} />
         <Text style={styles.actionText}>Preview</Text>
       </Pressable>
       {/* A failed voice can only be deleted and recorded again (the server has no retry). */}
@@ -105,7 +119,7 @@ export const FamilyVoicesScreen: React.FC = () => {
     narratorPickerStoryId,
     selectNarrator,
   } = useApp();
-  const { gradients } = useAppTheme();
+  const { gradients, colors } = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const isPicker = Boolean(narratorPickerStoryId);
   // One global narrator plays every story, in the picker and on the Voices tab alike.
@@ -219,7 +233,7 @@ export const FamilyVoicesScreen: React.FC = () => {
           onPress={() => setCurrentScreen(isPicker ? 'NowPlaying' : 'Home')}
           accessibilityRole="button"
           accessibilityLabel="Go back">
-          <Text style={styles.backIcon}>‹</Text>
+          <MaterialIcons name="chevron-left" size={32} color={colors.textDark} />
         </Pressable>
         <Text style={styles.headerTitle}>Family Voices</Text>
         <Pressable
@@ -227,7 +241,7 @@ export const FamilyVoicesScreen: React.FC = () => {
           onPress={() => setCurrentScreen('AddVoice')}
           accessibilityRole="button"
           accessibilityLabel="Add a family voice">
-          <Text style={styles.addIcon}>+</Text>
+          <MaterialIcons name="add" size={26} color={colors.textDark} />
         </Pressable>
       </View>
 
@@ -284,7 +298,7 @@ export const FamilyVoicesScreen: React.FC = () => {
           accessibilityLabel="Use system voice">
           <View style={styles.voiceTopRow}>
             <View style={styles.avatarCircle}>
-              <Text style={styles.avatarEmoji}>🔊</Text>
+              <MaterialIcons name="volume-up" size={28} color={colors.primary} />
             </View>
             <View style={styles.voiceDetails}>
               <Text style={styles.voiceName}>System Voice</Text>
@@ -292,7 +306,7 @@ export const FamilyVoicesScreen: React.FC = () => {
             </View>
             {!selectedVoiceId && (
               <View style={styles.defaultStatus} accessibilityLabel="System Voice selected">
-                <Text style={styles.checkMark}>✓</Text>
+                <MaterialIcons name="check" size={18} color={colors.onPrimary} />
               </View>
             )}
           </View>
@@ -339,7 +353,8 @@ export const FamilyVoicesScreen: React.FC = () => {
           onPress={() => setCurrentScreen('AddVoice')}
           accessibilityRole="button"
           accessibilityLabel="Add family voice">
-          <Text style={styles.addVoiceButtonText}>+ Add family voice</Text>
+          <MaterialIcons name="add" size={22} color={colors.onPrimary} />
+          <Text style={styles.addVoiceButtonText}>Add family voice</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -366,19 +381,13 @@ const makeStyles = (colors: ThemeColors) => ({
     justifyContent: 'center' as const,
     zIndex: 1,
   },
-  backIcon: {
-    color: colors.textDark,
-    fontSize: 34,
-    fontWeight: '300' as const,
-    lineHeight: 36,
-  },
   headerTitle: {
     position: 'absolute' as const,
     left: 0,
     right: 0,
     textAlign: 'center' as const,
     color: colors.textDark,
-    ...theme.typography.cardTitle,
+    ...theme.typography.screenTitle,
   },
   addButton: {
     width: 42,
@@ -390,12 +399,6 @@ const makeStyles = (colors: ThemeColors) => ({
     borderWidth: 1,
     borderColor: colors.borderLight,
     zIndex: 1,
-  },
-  addIcon: {
-    color: colors.textDark,
-    fontSize: 27,
-    fontWeight: '400' as const,
-    lineHeight: 28,
   },
   // Extra bottom space so the last button clears the mini player.
   content: { paddingHorizontal: 19, paddingTop: 28, paddingBottom: 140 },
@@ -448,7 +451,6 @@ const makeStyles = (colors: ThemeColors) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  checkMark: { color: colors.onPrimary, fontSize: 16, fontWeight: '800' as const },
   actionRow: { flexDirection: 'row' as const, gap: spacing.sm, marginTop: 18 },
   actionButton: {
     flex: 1,
@@ -462,7 +464,6 @@ const makeStyles = (colors: ThemeColors) => ({
     flexDirection: 'row' as const,
     gap: 8,
   },
-  playIcon: { color: colors.textDark, fontSize: 13 },
   actionText: { ...theme.typography.section, color: colors.textDark },
   emptyRetry: { flex: 0, marginTop: 14 },
   addVoiceButton: {
@@ -471,6 +472,8 @@ const makeStyles = (colors: ThemeColors) => ({
     backgroundColor: colors.primary,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
+    flexDirection: 'row' as const,
+    gap: 6,
     marginTop: 2,
   },
   addVoiceButtonText: { ...theme.typography.section, color: colors.onPrimary },

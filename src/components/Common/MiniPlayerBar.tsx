@@ -23,7 +23,7 @@ export const MiniPlayerBar: React.FC = () => {
     playPreviousStory,
     togglePlayPause,
     setCurrentScreen,
-    defaultNarrator: narrator,
+    playingNarrator: narrator,
   } = useApp();
   const { colors } = useAppTheme();
   const styles = useThemedStyles(makeStyles);

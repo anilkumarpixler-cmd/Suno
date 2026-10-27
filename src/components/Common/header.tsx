@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, theme, ThemeColors } from '../../Theme/Index';
-import { useThemedStyles } from '../../Theme/ThemeProvider';
+import { useAppTheme, useThemedStyles } from '../../Theme/ThemeProvider';
 
 interface HeaderProps {
   title?: string;
@@ -12,12 +13,13 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ title, showBack, onBack, rightElement }) => {
   const styles = useThemedStyles(makeStyles);
+  const { colors } = useAppTheme();
 
   return (
     <View style={styles.container}>
       {showBack ? (
         <TouchableOpacity onPress={onBack} style={styles.side} accessibilityLabel="Go back">
-          <Text style={styles.iconText}>‹</Text>
+          <MaterialIcons name="chevron-left" size={32} color={colors.textDark} />
         </TouchableOpacity>
       ) : (
         <View style={[styles.side, styles.logoSide]}>
@@ -53,10 +55,9 @@ const makeStyles = (colors: ThemeColors) => ({
   logo: { ...theme.typography.hero, color: colors.textDark },
   logoDot: { color: colors.primary },
   title: {
-    ...theme.typography.section,
+    ...theme.typography.screenTitle,
     color: colors.textDark,
     flex: 1,
     textAlign: 'center' as const,
   },
-  iconText: { fontSize: 28, lineHeight: 32, color: colors.textDark },
 });

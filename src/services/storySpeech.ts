@@ -1,5 +1,6 @@
 import * as Speech from 'expo-speech';
 import { Platform } from 'react-native';
+import type { MaterialIcons } from '@expo/vector-icons';
 import { Category, Story, StoryLanguage } from '../Types';
 
 export const WORDS_PER_SECOND = 2.2;
@@ -32,12 +33,16 @@ export const getFallbackScript = (
 };
 
 /** Story types in the Create form; each has its own Home filter, so the two lists can't drift. */
-export const STORY_TYPES: { label: string; category: Category; icon: string }[] = [
-  { label: 'Bedtime adventure', category: 'Bedtime', icon: '🌙' },
-  { label: 'Funny adventure', category: 'Funny', icon: '😄' },
-  { label: 'Magical adventure', category: 'Magical', icon: '✨' },
-  { label: 'Learning story', category: 'Learning', icon: '📘' },
-  { label: 'Animal adventure', category: 'Animals', icon: '🐻' },
+export const STORY_TYPES: {
+  label: string;
+  category: Category;
+  icon: keyof typeof MaterialIcons.glyphMap;
+}[] = [
+  { label: 'Bedtime adventure', category: 'Bedtime', icon: 'bedtime' },
+  { label: 'Funny adventure', category: 'Funny', icon: 'sentiment-very-satisfied' },
+  { label: 'Magical adventure', category: 'Magical', icon: 'auto-awesome' },
+  { label: 'Learning story', category: 'Learning', icon: 'menu-book' },
+  { label: 'Animal adventure', category: 'Animals', icon: 'pets' },
 ];
 
 /** 'Adventure': the built-in space story, and Funny / Magical stories saved before they had their own. */

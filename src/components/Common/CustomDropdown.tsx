@@ -8,8 +8,9 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, theme, ThemeColors } from '@/Theme/Index';
-import { useThemedStyles } from '@/Theme/ThemeProvider';
+import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 
 type Anchor = { x: number; y: number; width: number };
 
@@ -31,6 +32,7 @@ export const CustomDropdown: React.FC<CustomDropdownProps> = ({
   onSelect,
 }) => {
   const styles = useThemedStyles(makeStyles);
+  const { colors } = useAppTheme();
   const fieldRef = useRef<View>(null);
   const { height: windowHeight } = useWindowDimensions();
   const [anchor, setAnchor] = useState<Anchor | null>(null);
@@ -67,7 +69,11 @@ export const CustomDropdown: React.FC<CustomDropdownProps> = ({
           <Text style={styles.value} numberOfLines={1}>
             {value}
           </Text>
-          <Text style={styles.chevron}>{isOpen ? '⌃' : '⌄'}</Text>
+          <MaterialIcons
+            name={isOpen ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
+            size={24}
+            color={colors.textMuted}
+          />
         </Pressable>
       </View>
 
@@ -141,12 +147,6 @@ const makeStyles = (colors: ThemeColors) => ({
     color: colors.textDark,
     flex: 1,
     paddingRight: 8,
-  },
-  chevron: {
-    color: colors.textMuted,
-    fontSize: 22,
-    lineHeight: 18,
-    marginTop: -5,
   },
   modalRoot: { flex: 1 },
   menuWrap: { position: 'absolute' as const },

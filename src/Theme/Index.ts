@@ -2,6 +2,8 @@ import { TextStyle } from 'react-native';
 
 export const typography = {
   hero: { fontSize: 28, fontWeight: '700', lineHeight: 34 } satisfies TextStyle,
+  // Page heading in the top bar, the same on every screen.
+  screenTitle: { fontSize: 22, fontWeight: '700', lineHeight: 28 } satisfies TextStyle,
   cardTitle: { fontSize: 17, fontWeight: '700', lineHeight: 22 } satisfies TextStyle,
   section: { fontSize: 16, fontWeight: '600', lineHeight: 20 } satisfies TextStyle,
   body: { fontSize: 14, fontWeight: '400', lineHeight: 20 } satisfies TextStyle,
