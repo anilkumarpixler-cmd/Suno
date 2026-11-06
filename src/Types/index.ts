@@ -14,6 +14,9 @@ export type CreateStoryInput = {
   script: string;
   language: StoryLanguage;
   category: Category;
+  /** Story type label from the form, saved on the server as `story_type`. */
+  storyType: string;
+  age?: number;
   narratorId: string;
   childName: string;
 };
@@ -22,6 +25,7 @@ export interface Child {
   id: string;
   name: string;
   avatar: string;
+  age?: number;
 }
 
 /** Server-side narrator lifecycle; only `ready` narrators read stories in their own voice. */
@@ -55,11 +59,15 @@ export interface Story {
   /** Android: length of the System Voice file, the timeline its progress is saved on. */
   systemVoiceDuration?: number;
   progress: number; // in seconds
+  /** Length of the voice that was playing when `progress` was saved (its timeline). */
+  progressDuration?: number;
   isFavorite?: boolean;
   script: string;
   language?: StoryLanguage;
   /** From Create Story; missing on built-in and older stories (Search falls back to the title). */
   childName?: string;
+  /** Child's age from Create Story (server stories only). */
+  age?: number;
 }
 
 export interface PlayerState {
@@ -78,6 +86,7 @@ export type RootScreen =
   | 'NowPlaying'
   | 'AddVoice'
   | 'Favorites'
+  | 'Albums'
   | 'SleepTimer'
   | 'Appearance'
   | 'GenerationLoader';

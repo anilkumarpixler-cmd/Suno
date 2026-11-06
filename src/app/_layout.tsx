@@ -70,6 +70,7 @@ function AppNavigator() {
           <Stack.Screen name="Screen/NowPlay" />
           <Stack.Screen name="Screen/AddVoicePage" />
           <Stack.Screen name="Screen/FavoritesPage" />
+          <Stack.Screen name="Screen/AlbumsPage" />
           <Stack.Screen name="Screen/SleepTimerPage" />
           <Stack.Screen name="Screen/AppearancePage" />
         </Stack>

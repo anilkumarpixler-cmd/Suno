@@ -47,6 +47,7 @@ const makeStyles = (colors: ThemeColors) => ({
   },
   side: {
     minWidth: 48,
+    minHeight: 44,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     overflow: 'visible' as const,

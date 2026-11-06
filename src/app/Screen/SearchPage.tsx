@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Common/header';
 import { StoryCard } from '@/components/Common/Home/StoryCart';
 import { useApp } from '@/Context/AppContext';
+import { storyLanguage } from '@/Data/albums';
 import { borderRadius, spacing, theme, ThemeColors } from '@/Theme/Index';
 import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 import { Story } from '@/Types';
@@ -13,12 +14,21 @@ import {
   clearSearchHistory,
   getSearchHistory,
   normalize,
+  searchHistoryClearCount,
 } from '@/storage/searchHistory';
 
-/** Title or child's name contains the query (partial: "aar" finds "Aarav"). */
-const matchesQuery = (story: Story, query: string) =>
-  normalize(story.title).includes(query) ||
-  (story.childName ? normalize(story.childName).includes(query) : false);
+/** A story's searchable text, normalized once per story list (not on every key press). */
+type SearchEntry = { story: Story; title: string; child: string; tags: string; script: string };
+
+/** Partial match ("aar" finds "Aarav"): 0 title, 1 child's name, 2 category / language,
+ * 3 words in the story; null = no match. Lower ranks are listed first. */
+const matchRank = (entry: SearchEntry, query: string): number | null => {
+  if (entry.title.includes(query)) return 0;
+  if (entry.child.includes(query)) return 1;
+  if (entry.tags.includes(query)) return 2;
+  if (entry.script.includes(query)) return 3;
+  return null;
+};
 
 export const SearchScreen: React.FC = () => {
   const { stories, playingNarrator, playStory, setCurrentScreen } = useApp();
@@ -37,16 +47,37 @@ export const SearchScreen: React.FC = () => {
     };
   }, []);
 
+  const entries = useMemo<SearchEntry[]>(
+    () =>
+      stories.map((story) => ({
+        story,
+        title: normalize(story.title),
+        child: story.childName ? normalize(story.childName) : '',
+        tags: normalize(`${story.category} ${storyLanguage(story)}`),
+        script: normalize(story.script || ''),
+      })),
+    [stories],
+  );
+
   const normalizedQuery = normalize(query);
+  // Best matches first; sort is stable, so equal ranks keep the server's newest-first order.
   const results = normalizedQuery
-    ? stories.filter((story) => matchesQuery(story, normalizedQuery))
+    ? entries
+        .map((entry) => ({ story: entry.story, rank: matchRank(entry, normalizedQuery) }))
+        .filter((match): match is { story: Story; rank: number } => match.rank !== null)
+        .sort((a, b) => a.rank - b.rank)
+        .map((match) => match.story)
     : stories;
   const showHistory = !normalizedQuery && history.length > 0;
 
   // Saved on the Search key or on opening a result, not per keystroke ("a", "aa", "aar"…).
   const rememberQuery = () => {
     if (!normalizedQuery) return;
-    void addSearchHistory(query).then(setHistory);
+    const askedAt = searchHistoryClearCount();
+    // A save that finishes after "Clear all" must not put the old list back on screen.
+    void addSearchHistory(query).then((next) => {
+      if (searchHistoryClearCount() === askedAt) setHistory(next);
+    });
   };
 
   const handleClearHistory = () => {
@@ -64,7 +95,7 @@ export const SearchScreen: React.FC = () => {
           style={styles.searchInput}
           value={query}
           onChangeText={setQuery}
-          placeholder="Search by story title or child's name"
+          placeholder="Search titles, names or words in a story"
           placeholderTextColor={colors.placeholder}
           selectionColor={colors.primary}
           autoFocus
@@ -141,7 +172,7 @@ export const SearchScreen: React.FC = () => {
             </Text>
             <Text style={styles.emptySub}>
               {normalizedQuery
-                ? "Try a different title or child's name."
+                ? 'Try a different word.'
                 : 'Create a story and it will show up here.'}
             </Text>
           </View>

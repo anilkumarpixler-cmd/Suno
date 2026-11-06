@@ -22,11 +22,28 @@ export const getSearchHistory = async (): Promise<string[]> => {
   }
 };
 
+// History writes run one after another: a save that reads the list while a clear (or another
+// save) is still writing would put the old searches back.
+let writeChain: Promise<unknown> = Promise.resolve();
+const queueWrite = <T>(task: () => Promise<T>): Promise<T> => {
+  const run = writeChain.then(task, task);
+  writeChain = run.catch(() => undefined);
+  return run;
+};
+
+// Bumped by "Clear all": a save asked for before it must not write the old list back.
+let clearCount = 0;
+
 /** Newest first; searching "MOON " again moves "moon" to the top instead of adding it twice. */
-export const addSearchHistory = async (query: string): Promise<string[]> => {
+export const addSearchHistory = (query: string): Promise<string[]> => {
+  const askedAt = clearCount;
+  return queueWrite(() => saveSearch(query, askedAt));
+};
+
+const saveSearch = async (query: string, askedAt: number): Promise<string[]> => {
   const text = query.trim().replace(/\s+/g, ' ');
   const history = await getSearchHistory();
-  if (!text) return history;
+  if (!text || askedAt !== clearCount) return history;
 
   const key = normalize(text);
   const next = [text, ...history.filter((item) => normalize(item) !== key)].slice(
@@ -41,12 +58,18 @@ export const addSearchHistory = async (query: string): Promise<string[]> => {
   return next;
 };
 
-export const clearSearchHistory = async (): Promise<boolean> => {
-  try {
-    await AsyncStorage.removeItem(SEARCH_HISTORY_STORAGE_KEY);
-    return true;
-  } catch (error) {
-    logStorageError('clear', error);
-    return false;
-  }
+export const clearSearchHistory = (): Promise<boolean> => {
+  clearCount += 1;
+  return queueWrite(async () => {
+    try {
+      await AsyncStorage.removeItem(SEARCH_HISTORY_STORAGE_KEY);
+      return true;
+    } catch (error) {
+      logStorageError('clear', error);
+      return false;
+    }
+  });
 };
+
+/** Changes on every "Clear all": a save's result from before it is stale for the screen. */
+export const searchHistoryClearCount = () => clearCount;

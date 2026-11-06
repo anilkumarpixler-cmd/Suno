@@ -21,6 +21,10 @@ type CustomDropdownProps = {
   isOpen: boolean;
   onToggle: () => void;
   onSelect: (value: string) => void;
+  /** Shown in the field while nothing is chosen (`value` is ''). */
+  placeholder?: string;
+  /** Shown under the field with a red border (required / invalid). */
+  error?: string;
 };
 
 export const CustomDropdown: React.FC<CustomDropdownProps> = ({
@@ -30,6 +34,8 @@ export const CustomDropdown: React.FC<CustomDropdownProps> = ({
   isOpen,
   onToggle,
   onSelect,
+  placeholder,
+  error,
 }) => {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useAppTheme();
@@ -62,12 +68,13 @@ export const CustomDropdown: React.FC<CustomDropdownProps> = ({
       <Text style={styles.label}>{label}</Text>
       <View ref={fieldRef} collapsable={false}>
         <Pressable
-          style={[styles.field, isOpen && styles.fieldOpen]}
+          style={[styles.field, Boolean(error) && styles.fieldError, isOpen && styles.fieldOpen]}
           onPress={onToggle}
           accessibilityRole="combobox"
-          accessibilityState={{ expanded: isOpen }}>
-          <Text style={styles.value} numberOfLines={1}>
-            {value}
+          accessibilityState={{ expanded: isOpen }}
+          accessibilityHint={error || undefined}>
+          <Text style={[styles.value, !value && styles.placeholder]} numberOfLines={1}>
+            {value || placeholder}
           </Text>
           <MaterialIcons
             name={isOpen ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
@@ -76,6 +83,11 @@ export const CustomDropdown: React.FC<CustomDropdownProps> = ({
           />
         </Pressable>
       </View>
+      {Boolean(error) && (
+        <Text style={styles.errorText} accessibilityLiveRegion="polite">
+          {error}
+        </Text>
+      )}
 
       <Modal
         visible={isOpen}
@@ -142,12 +154,15 @@ const makeStyles = (colors: ThemeColors) => ({
     justifyContent: 'space-between' as const,
   },
   fieldOpen: { borderColor: colors.primary },
+  fieldError: { borderColor: colors.danger },
   value: {
     ...theme.typography.body,
     color: colors.textDark,
     flex: 1,
     paddingRight: 8,
   },
+  placeholder: { color: colors.placeholder },
+  errorText: { ...theme.typography.caption, color: colors.danger, marginTop: 6 },
   modalRoot: { flex: 1 },
   menuWrap: { position: 'absolute' as const },
   menu: {

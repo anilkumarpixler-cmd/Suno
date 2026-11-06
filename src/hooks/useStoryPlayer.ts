@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEventListener } from 'expo';
 import {
+  clearPreloadedSource,
+  preload,
   setAudioModeAsync,
   setIsAudioActiveAsync,
   useAudioPlayer,
@@ -10,7 +12,14 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 import { RootScreen, Story, Voice } from '../Types';
-import { cancelStoryPlay, prefetchStory, readStory, waitStoryAudio } from '../services/sunoApi';
+import {
+  cancelStoryPlay,
+  isServerNotConnected,
+  prefetchStory,
+  readStory,
+  waitStoryAudio,
+  waitStoryChunk,
+} from '../services/sunoApi';
 import { showToast } from '../components/Common/Toast';
 import { claimMedia, releaseMedia } from '../services/activeMedia';
 import type { DeviceMediaCommand } from '../../modules/suno-media-session';
@@ -103,6 +112,28 @@ type PendingSave = {
   language: string;
 };
 
+/** A narrator story played chunk by chunk while the server reads the rest: no wait for the
+ * whole file. The clock and length are the story's (chunk start + time in the chunk). */
+type LiveRead = {
+  key: string;
+  chunkUrls: string[];
+  chunkWords: number[];
+  /** Chunks the server has read. */
+  ready: boolean[];
+  /** Real lengths of the chunks loaded so far (0 = not loaded yet). */
+  durations: number[];
+  /** The chunk in the player, or the one the story waits for. */
+  index: number;
+  waiting: boolean;
+  /** Where in the awaited chunk the story goes on. */
+  waitOffset: number;
+  /** The whole file the story is saved with once every chunk's length is known. */
+  save: PendingSave;
+  saved: boolean;
+  /** A later chunk failed: the chunks already read play first, then System Voice takes over. */
+  error: string;
+};
+
 export const useStoryPlayer = ({
   stories,
   voices,
@@ -151,6 +182,8 @@ export const useStoryPlayer = ({
   // The narrator story the server is reading right now (cancelled when no longer wanted).
   const playIdRef = useRef('');
   const pendingSaveRef = useRef<PendingSave | null>(null);
+  // The narrator story playing chunk by chunk while the server reads it (null otherwise).
+  const liveRef = useRef<LiveRead | null>(null);
   // Last play() / pause() from JS: statuses right after it may still show the old state.
   const lastJsCommandAtRef = useRef(0);
   // Re-reads the native player once that window ends: expo-audio sends one status for a native
@@ -180,9 +213,20 @@ export const useStoryPlayer = ({
     }
   };
 
+  /** Ends the chunk-by-chunk play and frees its preloaded chunks. */
+  const dropLiveRead = () => {
+    const live = liveRef.current;
+    if (!live) return;
+    liveRef.current = null;
+    live.chunkUrls.forEach((url, index) => {
+      if (index > 0 && live.ready[index]) void clearPreloadedSource(url).catch(() => undefined);
+    });
+  };
+
   const setSource = (source: PlaybackSource) => {
     playbackSourceRef.current = source;
     setPlaybackSource(source);
+    if (source === 'idle' || source === 'device') dropLiveRead();
     if (source === 'server') setHasServerSession(true);
     else if (source !== 'preparing') setHasServerSession(false);
   };
@@ -375,6 +419,7 @@ export const useStoryPlayer = ({
     trackDuration: number,
     resumeAt: number,
     durationKnown: boolean,
+    askFocus = true,
   ) => {
     setSource('server');
     setAudioDuration(trackDuration);
@@ -394,7 +439,11 @@ export const useStoryPlayer = ({
       awaitingPlayRef.current = false;
       player.replace(audioUrl);
       applyPlayerRate(playbackSpeedRef.current);
-      void playWithFreshFocus();
+      // Paused (a seek to another chunk): the next Play starts it.
+      if (!shouldPlayRef.current) return;
+      // Chunk to chunk the story already holds the audio: no focus round trip (a gap).
+      if (askFocus) void playWithFreshFocus();
+      else safePlay();
       return;
     }
     pendingStartRef.current = start;
@@ -404,10 +453,138 @@ export const useStoryPlayer = ({
     player.replace(audioUrl);
   };
 
+  /** Seconds per word of a live read: measured on the chunks loaded so far, else the estimate. */
+  const liveSecondsPerWord = (live: LiveRead) => {
+    let seconds = 0;
+    let words = 0;
+    live.durations.forEach((length, index) => {
+      if (length <= 0) return;
+      seconds += length;
+      words += live.chunkWords[index];
+    });
+    return words > 0 ? seconds / words : 1 / WORDS_PER_SECOND;
+  };
+
+  const liveChunkLength = (live: LiveRead, index: number) =>
+    live.durations[index] || live.chunkWords[index] * liveSecondsPerWord(live);
+
+  /** Where chunk `index` starts on the story's clock (`chunkUrls.length`: the story's length). */
+  const liveChunkStart = (live: LiveRead, index: number) => {
+    let start = 0;
+    for (let i = 0; i < index; i += 1) start += liveChunkLength(live, i);
+    return start;
+  };
+
+  /** The chunk that holds story time `time`, and how far into it. */
+  const liveChunkAt = (live: LiveRead, time: number) => {
+    const last = live.chunkUrls.length - 1;
+    let start = 0;
+    for (let index = 0; index < last; index += 1) {
+      const length = liveChunkLength(live, index);
+      if (time < start + length) return { index, offset: Math.max(0, time - start) };
+      start += length;
+    }
+    return { index: last, offset: Math.max(0, time - start) };
+  };
+
+  /** Plays chunk `index` of a live read from `offset` seconds into it. */
+  const startLiveChunk = (live: LiveRead, index: number, offset: number, askFocus = true) => {
+    live.index = index;
+    live.waiting = false;
+    startClonedPlayback(live.chunkUrls[index], liveChunkLength(live, index), offset, false, askFocus);
+    setAudioDuration(liveChunkStart(live, live.chunkUrls.length));
+    setTime(liveChunkStart(live, index) + (offset > 0.4 ? offset : 0));
+  };
+
+  /** The story reached a chunk the server hasn't read yet: the clock waits there, as while a
+   * narrator story prepares, and the chunk plays once the server has it (followLiveRead). */
+  const waitForLiveChunk = (live: LiveRead, index: number, offset: number) => {
+    live.index = index;
+    live.waiting = true;
+    live.waitOffset = offset;
+    const at = liveChunkStart(live, index) + offset;
+    setSource('preparing');
+    preparingFromRef.current = at;
+    setTime(at);
+  };
+
+  /** A chunk finished: the next one plays at once when the server has it, else the story waits. */
+  const nextLiveChunk = (live: LiveRead) => {
+    const finished = live.index;
+    const next = finished + 1;
+    if (finished > 0) void clearPreloadedSource(live.chunkUrls[finished]).catch(() => undefined);
+    if (live.ready[next]) {
+      startLiveChunk(live, next, 0, false);
+      return;
+    }
+    if (live.error) {
+      handleTrackError(live.error);
+      return;
+    }
+    waitForLiveChunk(live, next, 0);
+  };
+
+  /** A seek in a live read stays in the chunks the server has read (past them: their end). */
+  const seekLive = (live: LiveRead, time: number) => {
+    const missing = live.ready.indexOf(false);
+    const readEnd = liveChunkStart(live, missing < 0 ? live.chunkUrls.length : missing);
+    const target = Math.max(0, Math.min(time, readEnd - 0.5));
+    const { index, offset } = liveChunkAt(live, target);
+    if (index !== live.index) {
+      startLiveChunk(live, index, offset);
+      return;
+    }
+    setTime(target);
+    void player.seekTo(offset);
+    if (shouldPlayRef.current) safePlay();
+  };
+
+  /** A loaded chunk's real length: the story's length follows. Once every chunk is known, the
+   * story is saved with its whole file (the chunks joined), which a replay plays at once. */
+  const noteLiveDuration = (live: LiveRead, length: number) => {
+    live.durations[live.index] = length;
+    setAudioDuration(liveChunkStart(live, live.chunkUrls.length));
+    if (live.saved || live.durations.some((known) => known <= 0)) return;
+    live.saved = true;
+    saveClonedAudio(live.save, durationRef.current);
+  };
+
+  /** Follows the server through the rest of a live read: each chunk is preloaded once read, and
+   * a story waiting for it goes on. The whole file is never waited for. */
+  const followLiveRead = async (live: LiveRead, story: Story, playId: string) => {
+    const isCurrent = () => liveRef.current === live;
+    try {
+      for (let index = 1; index < live.chunkUrls.length; index += 1) {
+        for (;;) {
+          const result = await waitStoryChunk(live.key, index);
+          if (!isCurrent()) return;
+          if (result.status === 'ready') break;
+          if (result.status === 'failed') throw new Error(result.detail);
+        }
+        live.ready[index] = true;
+        void preload(live.chunkUrls[index]).catch(() => undefined);
+        if (live.waiting && live.index === index && shouldPlayRef.current) {
+          startLiveChunk(live, index, live.waitOffset);
+        }
+      }
+      if (playIdRef.current === playId) playIdRef.current = '';
+      // Only now: the server makes the next story's prefetch before this story's own chunks.
+      prepareAhead(story);
+    } catch (error) {
+      if (!isCurrent()) return;
+      const message = error instanceof Error ? error.message : 'Voice clone failed';
+      if (live.waiting) handleTrackError(message);
+      else live.error = message;
+    }
+  };
+
   /** A story track did not load or play (narrator file: 404, network; or a System Voice file):
    * continue in System Voice. */
   const handleTrackError = (message: string) => {
-    const resumeAt = awaitingPlayRef.current ? pendingStartRef.current : currentTimeRef.current;
+    // A live read's clock is already the story's (pendingStartRef is a point in one chunk).
+    const resumeAt =
+      awaitingPlayRef.current && !liveRef.current ? pendingStartRef.current : currentTimeRef.current;
+    dropLiveRead();
     awaitingPlayRef.current = false;
     pendingStartRef.current = 0;
     // A broken URL is never saved as the story's cloned audio.
@@ -423,8 +600,11 @@ export const useStoryPlayer = ({
     const systemVoiceFile = trackIsSystemVoiceRef.current;
     trackIsSystemVoiceRef.current = false;
     if (__DEV__) console.warn(systemVoiceFile ? 'System Voice file failed:' : 'Narrator track failed:', message);
+    // Only a lost PC server is named; any other cause (GPU included) keeps the general message.
     showToast(
-      `${systemVoiceFile ? 'Story' : 'Narrator'} audio could not play. Playing in System Voice.`,
+      isServerNotConnected(message)
+        ? 'Server not connected. Playing the rest in System Voice.'
+        : `${systemVoiceFile ? 'Story' : 'Narrator'} audio could not play. Playing in System Voice.`,
       'error',
     );
     // Continues from the same words: the track's time on the System Voice timeline.
@@ -468,7 +648,33 @@ export const useStoryPlayer = ({
       const started = await readStory(storyText(story), language, voice.id, playId);
       if (!isCurrent() || started.kind === 'cancelled') return;
 
-      // One continuous file only: wait until the whole story is read, then play it.
+      // Being read: chunk 0 is ready now and plays at once; each next chunk plays once the
+      // server has it, without waiting for the whole file.
+      if (started.kind === 'streaming') {
+        const live: LiveRead = {
+          key: started.key,
+          chunkUrls: started.chunkUrls,
+          chunkWords: started.chunkWords,
+          ready: started.chunkUrls.map((_, index) => index === 0),
+          durations: started.chunkUrls.map(() => 0),
+          index: 0,
+          waiting: false,
+          waitOffset: 0,
+          save: { story, audioUrl: started.audioUrl, voiceId: voice.id, language },
+          saved: false,
+          error: '',
+        };
+        liveRef.current = live;
+        // The resume point on the live timeline (estimated until the chunks load).
+        const at = rescaleTime(resumeAt, durationRef.current, liveChunkStart(live, live.chunkUrls.length));
+        const { index, offset } = liveChunkAt(live, at);
+        if (index === 0) startLiveChunk(live, 0, offset);
+        else waitForLiveChunk(live, index, offset);
+        void followLiveRead(live, story, playId);
+        return;
+      }
+
+      // No chunk info from the server: wait until the whole story is read, then play it.
       if (started.kind === 'pending') {
         for (;;) {
           const result = await waitStoryAudio(started.key);
@@ -562,6 +768,7 @@ export const useStoryPlayer = ({
     stopSpeech();
     safePause();
     cancelServerRead();
+    dropLiveRead();
     if (playbackSourceRef.current === 'preparing') cancelSpeechRender();
     pendingSaveRef.current = null;
     trackIsSystemVoiceRef.current = false;
@@ -687,6 +894,11 @@ export const useStoryPlayer = ({
       const ended = currentTimeRef.current >= durationRef.current - 0.25;
       if (ended) {
         setTime(0);
+        const live = liveRef.current;
+        if (live && live.index !== 0) {
+          startLiveChunk(live, 0, 0);
+          return;
+        }
         try {
           await player.seekTo(0);
         } catch {
@@ -720,6 +932,15 @@ export const useStoryPlayer = ({
     setTime(nextTime);
 
     if (playbackSourceRef.current === 'server') {
+      const live = liveRef.current;
+      if (live) {
+        if (shouldPlayRef.current || isPlaying) {
+          shouldPlayRef.current = true;
+          setIsPlaying(true);
+        }
+        seekLive(live, nextTime);
+        return;
+      }
       void player.seekTo(nextTime);
       if (shouldPlayRef.current || isPlaying) {
         shouldPlayRef.current = true;
@@ -777,6 +998,11 @@ export const useStoryPlayer = ({
       setIsPlaying(true);
       setTime(0);
       if (playbackSourceRef.current === 'server') {
+        const live = liveRef.current;
+        if (live && live.index !== 0) {
+          startLiveChunk(live, 0, 0);
+          return;
+        }
         void player.seekTo(0);
         safePlay();
         return;
@@ -994,8 +1220,14 @@ export const useStoryPlayer = ({
         start = rescaleTime(start, pendingStartScaleRef.current, status.duration);
         // Paused at the very end of the real track: the story had finished, so it starts over.
         if (start >= status.duration - 0.5) start = 0;
-        setAudioDuration(status.duration);
-        setTime(start);
+        const live = liveRef.current;
+        if (live) {
+          noteLiveDuration(live, status.duration);
+          setTime(liveChunkStart(live, live.index) + start);
+        } else {
+          setAudioDuration(status.duration);
+          setTime(start);
+        }
       }
       if (start > 0.4) {
         void player
@@ -1011,24 +1243,34 @@ export const useStoryPlayer = ({
     // Ignore the previous track's finished status until the new one has started
     // (its end time and didJustFinish would otherwise end the new track at once).
     if (status.didJustFinish && !hasStartedRef.current) return;
+    // A live read's clock and length are the story's, not the chunk's.
+    const live = liveRef.current;
     if (typeof status.currentTime === 'number') {
-      setTime(status.currentTime);
+      setTime(live ? liveChunkStart(live, live.index) + status.currentTime : status.currentTime);
       // Only real playback: the seek to a resume point before play() is not a start, else the
       // still-paused new track reads as a native pause and the play is dropped.
       if (status.playing && status.currentTime > 0.15) hasStartedRef.current = true;
     }
     // The server reports no length: the player's is the real one, saved with the story once.
     if (typeof status.duration === 'number' && status.duration > 0) {
-      setAudioDuration(status.duration);
-      const save = pendingSaveRef.current;
-      if (save) {
-        pendingSaveRef.current = null;
-        saveClonedAudio(save, status.duration);
+      if (live) {
+        noteLiveDuration(live, status.duration);
+      } else {
+        setAudioDuration(status.duration);
+        const save = pendingSaveRef.current;
+        if (save) {
+          pendingSaveRef.current = null;
+          saveClonedAudio(save, status.duration);
+        }
       }
     }
 
     if (status.didJustFinish) {
       hasStartedRef.current = false;
+      if (live && live.index < live.chunkUrls.length - 1) {
+        nextLiveChunk(live);
+        return;
+      }
       onStoryEndedRef.current();
     }
   });

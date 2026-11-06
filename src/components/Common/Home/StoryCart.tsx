@@ -4,6 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { Story, Voice } from '../../../Types';
 import { borderRadius, spacing, theme, ThemeColors } from '../../../Theme/Index';
 import { useAppTheme, useThemedStyles } from '../../../Theme/ThemeProvider';
+import { StoryArt } from '../StoryArt';
 
 type StoryCardProps = {
   story: Story;
@@ -26,7 +27,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({
   const styles = useThemedStyles(makeStyles);
   const { colors } = useAppTheme();
   const isContinue = variant === 'continue';
-  const narratorLabel = narrator?.name ? `${narrator.name} voice's` : 'System Voice';
+  const narratorLabel = narrator?.name ? `${narrator.name}'s voice` : 'System Voice';
   // Created stories store the script's first 80 characters as their description: show the script,
   // so the cut lands at the line end with "…", not mid-word.
   const preview =
@@ -40,7 +41,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({
         accessibilityRole="button"
         accessibilityLabel={story.title}>
         <View style={styles.art}>
-          <Text style={styles.artEmoji}>{story.artwork}</Text>
+          <StoryArt category={story.category} emoji={story.artwork} size={34} />
         </View>
         <View style={styles.body}>
           <Text style={styles.title} numberOfLines={1}>
@@ -57,7 +58,13 @@ export const StoryCard: React.FC<StoryCardProps> = ({
               <View
                 style={[
                   styles.progressFill,
-                  { width: `${Math.min(100, (story.progress / Math.max(1, story.duration)) * 100)}%` },
+                  {
+                    // Same voice as the progress; older saves without it use the story's length.
+                    width: `${Math.min(
+                      100,
+                      (story.progress / Math.max(1, story.progressDuration || story.duration)) * 100,
+                    )}%`,
+                  },
                 ]}
               />
             </View>
@@ -107,7 +114,6 @@ const makeStyles = (colors: ThemeColors) => ({
     justifyContent: 'center' as const,
     marginRight: spacing.md,
   },
-  artEmoji: { fontSize: 28 },
   body: { flex: 1, minWidth: 0 },
   title: { ...theme.typography.cardTitle, color: colors.textDark },
   meta: { ...theme.typography.caption, color: colors.textMuted, marginTop: 4 },

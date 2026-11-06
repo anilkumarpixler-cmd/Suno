@@ -15,6 +15,7 @@ import {
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
   useAudioPlayer,
+  useAudioPlayerStatus,
   useAudioRecorder,
   useAudioRecorderState,
   type RecordingStatus,
@@ -30,10 +31,12 @@ import { deleteVoiceRecording } from '@/storage/voiceAudio';
 import {showToast} from '@/components/Common/Toast';
 import { claimMedia, releaseMedia } from '@/services/activeMedia';
 import { ConfirmModal } from '@/modal/confirmModal';
-const LANGUAGE_OPTIONS = ['Hindi + English', 'Hindi', 'English', 'Punjabi', 'Gujarati'];
-// Cloning reads the first ~10 s of clear speech: shorter clones badly, longer is never used.
+import { fetchVoices } from '@/services/sunoApi';
+import { MicPulse, RecordingProgress, VoiceLevelBars } from '@/components/Common/RecordingAnimation';
+const LANGUAGE_OPTIONS = ['Hindi', 'English'];
+// Cloning reads the first ~10 s of clear speech: shorter clones badly. No maximum: the user
+// stops the recording with Stop.
 const MIN_RECORDING_SECONDS = 8;
-const MAX_RECORDING_SECONDS = 30;
 
 /** Other apps' audio (a song in YouTube, Spotify…) pauses so it stays out of the recording:
  * the audio mode on iOS, a recording audio focus request on Android. */
@@ -63,12 +66,19 @@ export const AddVoiceScreen: React.FC = () => {
   const { colors } = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   const [name, setName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const key = nameKey(name);
+  // Not while saving: the saved voice joins `voices` while this page is still fading out, and
+  // would match its own name. A failed save turns isSaving off, so the check is back for a retry.
   const nameTaken =
-    key !== '' && (key === SYSTEM_VOICE_KEY || voices.some((voice) => nameKey(voice.name) === key));
+    !isSaving &&
+    key !== '' &&
+    (key === SYSTEM_VOICE_KEY || voices.some((voice) => nameKey(voice.name) === key));
   const nameError = nameTaken ? 'This name already exists. Please enter a valid voice name.' : '';
   const nameUsable = key !== '' && !nameTaken;
-  const [selectedLang, setSelectedLang] = useState('Hindi + English');
+  // Empty until the user picks one: shows "Please choose language", and Save asks for it.
+  const [selectedLang, setSelectedLang] = useState('');
+  const [langError, setLangError] = useState('');
   const [isLangOpen, setIsLangOpen] = useState(false);
   // Length of the saved recording, as the recorder measured it (not a JS timer).
   const [recordedSeconds, setRecordedSeconds] = useState(0);
@@ -77,9 +87,10 @@ export const AddVoiceScreen: React.FC = () => {
   const [isPreviewing, setIsPreviewing] = useState(false);
   // Mic denied for good: themed pop-up (light / dark) with Open Settings.
   const [micSettingsVisible, setMicSettingsVisible] = useState(false);
+  // Mic denied once: the OS can still show its prompt, so the themed pop-up offers to ask again.
+  const [micDeniedVisible, setMicDeniedVisible] = useState(false);
   // Recording under MIN_RECORDING_SECONDS: themed, rounded info pop-up instead of the native alert.
   const [tooShortVisible, setTooShortVisible] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   // Ref, not state: a second tap can arrive before the re-render that disables the button.
   const savingRef = useRef(false);
   // Same for Start / Retake: the button only hides once the recorder reports it is recording.
@@ -88,13 +99,19 @@ export const AddVoiceScreen: React.FC = () => {
 
   // Ref: the recorder subscribes its status listener once, so it must not capture stale state.
   const recordingFinishedRef = useRef<(status: RecordingStatus) => void>(() => undefined);
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY, (status) =>
+  // Metering only adds the live level for VoiceLevelBars; the recorded file is the same.
+  const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true }, (status) =>
     recordingFinishedRef.current(status),
   );
   const recorderState = useAudioRecorderState(recorder);
   const player = useAudioPlayer(recordedUri ?? undefined);
+  const previewStatus = useAudioPlayerStatus(player);
   const isRecording = recorderState.isRecording;
-  const elapsedSeconds = Math.min(Math.floor(recorderState.durationMillis / 1000), MAX_RECORDING_SECONDS);
+  const elapsedSeconds = Math.floor(recorderState.durationMillis / 1000);
+  // Last length the recorder reported: a stop the system makes (a call, another app taking the
+  // mic) resets its duration to 0 before the finish event arrives.
+  const lastSecondsRef = useRef(0);
+  if (isRecording) lastSecondsRef.current = recorderState.durationMillis / 1000;
   // True from record() until this recording is handled, so a manual stop and the native
   // finish event (both platforms emit one on every stop) save it only once.
   const activeRecordingRef = useRef(false);
@@ -103,19 +120,30 @@ export const AddVoiceScreen: React.FC = () => {
   const stopPreviewForOtherMedia = useRef(() => stopPreviewRef.current()).current;
   const stopRecordingRef = useRef<() => void>(() => undefined);
   const stopRecordingForOtherMedia = useRef(() => stopRecordingRef.current()).current;
+  // The current take, for the unmount cleanup (it runs with the first render's values).
+  const recordedUriRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (recordedUri) player.replace(recordedUri);
   }, [recordedUri]);
 
-  // Leaving the screen mid-recording must not keep other apps paused.
+  // Leaving the screen mid-recording must not keep other apps paused, or leave files behind.
   useEffect(
     () => () => {
+      // The stop below also fires the finish event: nothing is kept after leaving.
+      activeRecordingRef.current = false;
       try {
-        if (recorder.isRecording) void recorder.stop().catch(() => undefined);
+        if (recorder.isRecording) {
+          void recorder
+            .stop()
+            .then(() => deleteVoiceRecording(recorder.uri ?? undefined))
+            .catch(() => undefined);
+        }
       } catch {
         // Recorder may already be released.
       }
+      // Saved: the server has the audio (uploaded as base64). Not saved: the take was abandoned.
+      void deleteVoiceRecording(recordedUriRef.current ?? undefined);
       endRecordingAudio();
       releaseMedia(stopPreviewForOtherMedia);
       releaseMedia(stopRecordingForOtherMedia);
@@ -134,13 +162,10 @@ export const AddVoiceScreen: React.FC = () => {
     setIsPreviewing(false);
   };
 
-  const clearRecording = async () => {
-    stopPreview();
-    await deleteVoiceRecording(recordedUri ?? undefined);
-    setRecordedUri(null);
-    setIsRecorded(false);
-    setRecordedSeconds(0);
-  };
+  // The take played to its end: the button goes back to Preview and the media claim is freed.
+  useEffect(() => {
+    if (previewStatus.didJustFinish && isPreviewing) stopPreview();
+  }, [previewStatus.didJustFinish]);
 
   const handleStartRecording = async () => {
     if (!name.trim()) {
@@ -160,21 +185,20 @@ export const AddVoiceScreen: React.FC = () => {
           setMicSettingsVisible(true);
           return;
         }
-        Alert.alert(
-          'Microphone permission required',
-          'Please allow microphone access to record your voice.',
-        );
+        setMicDeniedVisible(true);
         return;
       }
 
       // The story must not play into the microphone; Play resumes it after recording.
       if (isPlaying || isPreparingAudio) pausePlayback();
-      await clearRecording();
+      // The current take stays until a new one is kept (keepRecording): a retake whose mic
+      // fails to start must not lose it.
+      stopPreview();
       // Other apps' audio is paused before the mic opens, so the timer starts on a quiet room.
       await beginRecordingAudio();
       await recorder.prepareToRecordAsync();
-      // The native recorder enforces the cap, so it holds while the app is in the background too.
-      recorder.record({ forDuration: MAX_RECORDING_SECONDS });
+      lastSecondsRef.current = 0;
+      recorder.record();
       activeRecordingRef.current = true;
       // A story started from the mini player stops the recording instead of playing into it.
       claimMedia(stopRecordingForOtherMedia);
@@ -188,6 +212,8 @@ export const AddVoiceScreen: React.FC = () => {
   };
 
   const keepRecording = (uri: string, seconds: number) => {
+    // The take a Retake replaces goes only now: a retake that fails to start keeps it.
+    if (recordedUri && recordedUri !== uri) void deleteVoiceRecording(recordedUri);
     setRecordedUri(uri);
     setRecordedSeconds(seconds);
     setIsRecorded(true);
@@ -210,7 +236,7 @@ export const AddVoiceScreen: React.FC = () => {
     }
   };
 
-  // The recorder stopped on its own: the 30 s cap was reached, or the system ended it.
+  // The recorder stopped on its own: the system ended it (a call, another app took the mic).
   recordingFinishedRef.current = (status) => {
     if (!status.isFinished || !activeRecordingRef.current) return;
     activeRecordingRef.current = false;
@@ -221,11 +247,12 @@ export const AddVoiceScreen: React.FC = () => {
       Alert.alert('Recording error', 'Could not save the recording.');
       return;
     }
-    keepRecording(uri, MAX_RECORDING_SECONDS);
+    keepRecording(uri, lastSecondsRef.current);
   };
 
   stopPreviewRef.current = stopPreview;
   stopRecordingRef.current = () => void handleStopRecording();
+  recordedUriRef.current = recordedUri;
 
   const handleRetake = async () => {
     await handleStartRecording();
@@ -256,6 +283,10 @@ export const AddVoiceScreen: React.FC = () => {
       return;
     }
     if (nameTaken) return;
+    if (!selectedLang) {
+      setLangError('Please choose a language');
+      return;
+    }
     if (!recordedUri) {
       Alert.alert('Record your voice', 'Please record your voice before saving.');
       return;
@@ -268,11 +299,20 @@ export const AddVoiceScreen: React.FC = () => {
     savingRef.current = true;
     setIsSaving(true);
     stopPreview();
+    const knownIds = new Set(voices.map((voice) => voice.id));
     try {
       await addVoice(name, selectedLang.split(' + '), recordedUri);
       setCurrentScreen('Voices');
       showToast('Voice saved successfully', 'success');
     } catch (error) {
+      // The server may have stored it and only the reply was lost: a new voice with this name
+      // means it was saved (Voices reloads the list when it opens).
+      const remote = await fetchVoices().catch(() => null);
+      if (remote?.some((voice) => !knownIds.has(voice.id) && nameKey(voice.name) === key)) {
+        setCurrentScreen('Voices');
+        showToast('Voice saved successfully', 'success');
+        return;
+      }
       // The recording stays on the screen, so Save can be tapped again once the server is back.
       const message = error instanceof Error ? error.message : 'Could not save this voice. Please try again.';
       showToast(message, 'error');
@@ -312,12 +352,16 @@ export const AddVoiceScreen: React.FC = () => {
           <Text style={styles.label}>Language</Text>
           <View style={styles.dropdownWrap}>
             <Pressable
-              style={styles.dropdownField}
+              style={[styles.dropdownField, langError !== '' && styles.inputError]}
               onPress={() => setIsLangOpen((open) => !open)}
               accessibilityRole="combobox"
+              accessibilityLabel={`Language, ${selectedLang || 'not chosen'}`}
+              accessibilityHint={langError || undefined}
               accessibilityState={{ expanded: isLangOpen }}
             >
-              <Text style={styles.dropdownValue}>{selectedLang}</Text>
+              <Text style={[styles.dropdownValue, !selectedLang && { color: colors.placeholder }]}>
+                {selectedLang || 'Please choose language'}
+              </Text>
               <MaterialIcons
                 name={isLangOpen ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
                 size={24}
@@ -332,6 +376,7 @@ export const AddVoiceScreen: React.FC = () => {
                     style={[styles.option, lang === selectedLang && styles.selectedOption]}
                     onPress={() => {
                       setSelectedLang(lang);
+                      setLangError('');
                       setIsLangOpen(false);
                     }}
                   >
@@ -341,20 +386,33 @@ export const AddVoiceScreen: React.FC = () => {
               </View>
             )}
           </View>
+          {langError !== '' && (
+            <Text style={styles.errorText} accessibilityLiveRegion="polite">
+              {langError}
+            </Text>
+          )}
         </View>
 
         <View style={styles.recorderBox}>
-          <View style={styles.micCircle}>
-            <MaterialIcons name="mic" size={28} color={colors.primary} />
-          </View>
+          <MicPulse active={isRecording}>
+            <View style={[styles.micCircle, styles.micCircleInPulse]}>
+              <MaterialIcons name="mic" size={28} color={isRecording ? colors.danger : colors.primary} />
+            </View>
+          </MicPulse>
           <Text style={styles.recTitle}>
             {isRecording ? 'Recording Voice...' : isRecorded ? 'Voice Recorded' : 'Record your voice'}
           </Text>
           <Text style={styles.recSub}>
-            Read the sample story aloud clearly for 15–20 seconds in a quiet room to clone your voice tone.
+            {`Read the sample story aloud clearly for at least ${MIN_RECORDING_SECONDS} seconds in a quiet room to clone your voice tone, then tap Stop.`}
           </Text>
 
-          {isRecording && <Text style={styles.timerText}>{formatTime(elapsedSeconds)}</Text>}
+          {isRecording && (
+            <>
+              <Text style={styles.timerText}>{formatTime(elapsedSeconds)}</Text>
+              <VoiceLevelBars recorder={recorder} />
+              <RecordingProgress seconds={elapsedSeconds} min={MIN_RECORDING_SECONDS} />
+            </>
+          )}
 
           {!isRecording && !isRecorded && (
             <TouchableOpacity
@@ -372,7 +430,8 @@ export const AddVoiceScreen: React.FC = () => {
             </TouchableOpacity>
           )}
 
-          {isRecorded && (
+          {/* Hidden while a retake records: the previous take stays until the new one is kept. */}
+          {isRecorded && !isRecording && (
             <View style={styles.postRecRow}>
               <TouchableOpacity
                 style={[styles.secondaryBtn, (isSaving || isStarting) && styles.disabledBtn]}
@@ -387,7 +446,7 @@ export const AddVoiceScreen: React.FC = () => {
                   size={20}
                   color={colors.textDark}
                 />
-                <Text style={styles.playText}>{isPreviewing ? 'Pause' : 'Preview'}</Text>
+                <Text style={styles.playText}>{isPreviewing ? 'Playing…' : 'Preview'}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.saveBtn, (isSaving || nameTaken) && styles.disabledBtn]}
@@ -410,6 +469,20 @@ export const AddVoiceScreen: React.FC = () => {
           </Text>
         </View>
       </ScrollView>
+
+      <ConfirmModal
+        visible={micDeniedVisible}
+        title="Microphone permission required"
+        message="Please allow microphone access to record your voice."
+        cancelLabel="Not now"
+        confirmLabel="Allow"
+        confirmVariant="primary"
+        onCancel={() => setMicDeniedVisible(false)}
+        onConfirm={() => {
+          setMicDeniedVisible(false);
+          void handleStartRecording();
+        }}
+      />
 
       <ConfirmModal
         visible={micSettingsVisible}
@@ -513,6 +586,8 @@ const makeStyles = (colors: ThemeColors) => ({
     justifyContent: 'center' as const,
     marginBottom: 12,
   },
+  // MicPulse sets the spacing below the mic.
+  micCircleInPulse: { marginBottom: 0 },
   recTitle: { ...theme.typography.cardTitle, color: colors.textDark },
   recSub: { ...theme.typography.caption, color: colors.textMuted, textAlign: 'center' as const, marginTop: 4, marginBottom: 16 },
   timerText: { ...theme.typography.hero, fontSize: 24, lineHeight: 30, color: colors.primary, marginBottom: 12 },

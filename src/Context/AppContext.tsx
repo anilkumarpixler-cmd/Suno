@@ -1,24 +1,22 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { router, usePathname } from 'expo-router';
-import { Child, CreateStoryInput, RootScreen, Story, Voice } from '../Types';
-import { initialChild, initialStories } from '../Data/mockData';
+import { Child, CreateStoryInput, RootScreen, Story, StoryLanguage, Voice } from '../Types';
+import { storyLanguage } from '../Data/albums';
 import { useStoryPlayer } from '../hooks/useStoryPlayer';
 import { SleepModeSettings } from '../services/sleepMode';
-import { estimateDuration, normalizeStory } from '../services/storySpeech';
 import {
+  createStoryOnServer,
   deleteVoiceOnServer,
+  fetchStories,
   fetchVoices,
   setDefaultVoiceOnServer,
   uploadVoice,
 } from '../services/sunoApi';
 import {
-  deleteStory as deleteSavedStory,
   getDeletedStoryIds,
-  getStories,
   getStoryChanges,
   markStoryDeleted,
-  saveStory,
   updateStory,
 } from '../storage';
 
@@ -29,8 +27,12 @@ type AppContextType = {
   voices: Voice[];
   /** Voice list from the server: still loading, loaded, or the server couldn't be reached. */
   voicesStatus: VoicesStatus;
-  /** Loads the voice list again (Retry). */
+  /** Loads the voice list again. */
   refreshVoices: () => Promise<void>;
+  /** Story list from the server: still loading, loaded, or the server couldn't be reached. */
+  storiesStatus: VoicesStatus;
+  /** Loads the server's stories again. */
+  refreshStories: () => Promise<void>;
   stories: Story[];
   activeStory: Story | null;
   lastPlayedStoryId: string | null;
@@ -44,7 +46,11 @@ type AppContextType = {
   saveSleepMode: (settings: SleepModeSettings) => Promise<void>;
   isRepeat: boolean;
   toggleRepeat: () => void;
+  /** Plays in the all-stories order: leaves the album, if one was playing. */
   playStory: (story: Story, autoPlay?: boolean) => void;
+  /** Album being played: Next, Previous and auto-next stay in its language. null = all stories. */
+  activeAlbum: StoryLanguage | null;
+  playFromAlbum: (language: StoryLanguage, story: Story) => void;
   togglePlayPause: () => void;
   /** Pauses the story from any state (also while a cloned voice prepares); Play resumes. */
   pausePlayback: () => void;
@@ -76,6 +82,18 @@ export type VoicesStatus = 'loading' | 'ready' | 'offline';
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const VOICE_POLL_MS = 2000;
+const RECONNECT_POLL_MS = 5000;
+// Server back after being offline: the loader shows this long before the lists appear.
+const RECONNECT_LOADING_MS = 2000;
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Saved changes minus play / pause time: older builds stored it, and a restart starts from 0. */
+const withoutProgress = (changes?: Partial<Story>): Partial<Story> => {
+  if (!changes) return {};
+  const { progress: _progress, progressDuration: _progressDuration, ...rest } = changes;
+  return rest;
+};
 
 const screenRoutes: Record<RootScreen, string> = {
   Home: '/',
@@ -86,6 +104,7 @@ const screenRoutes: Record<RootScreen, string> = {
   NowPlaying: '/Screen/NowPlay',
   AddVoice: '/Screen/AddVoicePage',
   Favorites: '/Screen/FavoritesPage',
+  Albums: '/Screen/AlbumsPage',
   SleepTimer: '/Screen/SleepTimerPage',
   Appearance: '/Screen/AppearancePage',
   GenerationLoader: '/Screen/CreateStoryPage',
@@ -93,14 +112,22 @@ const screenRoutes: Record<RootScreen, string> = {
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentScreen, setCurrentScreenState] = useState<RootScreen>('Home');
-  const [child] = useState<Child>(initialChild);
   // Only the server's real voices: no demo voices, also not while loading or offline.
   const [voices, setVoices] = useState<Voice[]>([]);
   const [voicesStatus, setVoicesStatus] = useState<VoicesStatus>('loading');
-  const [stories, setStories] = useState<Story[]>(initialStories);
-  const [lastPlayedStoryId, setLastPlayedStoryId] = useState<string | null>(
-    initialStories.find((story) => story.progress > 0)?.id ?? null
-  );
+  // No demo stories and no stories saved on this device: the server's stories only.
+  const [stories, setStories] = useState<Story[]>([]);
+  // 'loading' until the first server reply, so Home doesn't say "No stories yet" while it waits.
+  const [storiesStatus, setStoriesStatus] = useState<VoicesStatus>('loading');
+  const [lastPlayedStoryId, setLastPlayedStoryId] = useState<string | null>(null);
+  // The server has no child profile: the child of the newest created story (stories are newest first).
+  const childStory = stories.find((story) => story.childName);
+  const child: Child = {
+    id: 'child',
+    name: childStory?.childName ?? '',
+    avatar: '🧒',
+    age: childStory?.age,
+  };
   const [narratorPickerStoryId, setNarratorPickerStoryId] = useState<string | null>(null);
   // Story fields changed in memory, so the startup load doesn't overwrite them with older saved values.
   const touchedFieldsRef = useRef(new Map<string, Set<keyof Story>>());
@@ -140,6 +167,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     navigateToScreen('Voices');
   };
 
+  const [activeAlbum, setActiveAlbum] = useState<StoryLanguage | null>(null);
+  // The player's playlist: next / previous / auto-next and the next-story prefetch walk this list.
+  const queue = activeAlbum
+    ? stories.filter((story) => storyLanguage(story) === activeAlbum)
+    : stories;
+
+  useEffect(() => {
+    // Its last story was deleted: back to all stories.
+    if (activeAlbum && queue.length === 0) setActiveAlbum(null);
+  }, [activeAlbum, queue.length]);
+
   const {
     activeStory,
     setActiveStory,
@@ -164,20 +202,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     isRepeat,
     toggleRepeat,
   } = useStoryPlayer({
-    stories,
+    stories: queue,
     voices,
     currentScreen,
     setCurrentScreen: navigateToScreen,
     onClonedAudio: (storyId, audioUrl, duration, voiceId, language) => {
-      const updates = {
+      const saved = {
         audioUri: audioUrl,
         duration,
         clonedVoiceId: voiceId,
         clonedLanguage: language,
-        progress: 0,
       };
+      // Progress is in memory only: a restart starts every story from 0.
+      const updates = { ...saved, progress: 0 };
       markTouched(storyId, Object.keys(updates) as (keyof Story)[]);
-      void updateStory(storyId, updates);
+      void updateStory(storyId, saved);
       setStories((currentStories) =>
         currentStories.map((story) => (story.id === storyId ? { ...story, ...updates } : story))
       );
@@ -197,51 +236,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
   });
 
-  useEffect(() => {
-    let isMounted = true;
-
-    Promise.all([getStories(), getDeletedStoryIds(), getStoryChanges()]).then(([savedStories, deletedIds, changes]) => {
-      const hasChanges = Object.keys(changes).length > 0;
-      if (!isMounted || (savedStories.length === 0 && deletedIds.length === 0 && !hasChanges)) return;
-      const deleted = new Set(deletedIds);
-      setStories((currentStories) => {
-        const liveStories = new Map(currentStories.map((story) => [story.id, story]));
-        const normalized = savedStories
-          .filter((story) => !deleted.has(story.id))
-          .map((story) => ({ ...normalizeStory(story), ...localEdits(liveStories.get(story.id)) }));
-        const savedIds = new Set(normalized.map((story) => story.id));
-        // Built-in stories keep their place, with their saved favorite/progress/audio applied.
-        const builtIn = currentStories
-          .filter((story) => !savedIds.has(story.id) && !deleted.has(story.id))
-          .map((story) =>
-            changes[story.id] ? { ...story, ...changes[story.id], ...localEdits(story), id: story.id } : story
-          );
-        return [...normalized, ...builtIn];
-      });
-      // Now Playing reads the playing story's own copy: give it the same saved values as the list.
-      setActiveStory((current) => {
-        if (!current || deleted.has(current.id)) return current;
-        const saved = savedStories.find((story) => story.id === current.id);
-        const stored = saved ? normalizeStory(saved) : changes[current.id];
-        if (!stored) return current;
-        return { ...current, ...stored, ...localEdits(current), id: current.id };
-      });
-      setLastPlayedStoryId((id) => (id && deleted.has(id) ? null : id));
-    });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
   // The server's list is the truth, even when empty. Offline keeps what is shown (nothing on the
-  // first load) and tries again on app foreground, on opening Voices, or on Retry.
+  // first load) and tries again on app foreground, on opening Voices, and every few seconds.
   const refreshingVoicesRef = useRef(false);
+  // Refs: the mount effect, the poll and AppState call refreshes made on an earlier render.
+  const voicesStatusRef = useRef(voicesStatus);
+  voicesStatusRef.current = voicesStatus;
+  const storiesStatusRef = useRef(storiesStatus);
+  storiesStatusRef.current = storiesStatus;
+
   const refreshVoices = async () => {
     if (refreshingVoicesRef.current) return;
     refreshingVoicesRef.current = true;
+    const wasOffline = voicesStatusRef.current === 'offline';
     try {
-      setVoices(await fetchVoices());
+      const serverVoices = await fetchVoices();
+      if (wasOffline) {
+        setVoicesStatus('loading');
+        await wait(RECONNECT_LOADING_MS);
+      }
+      setVoices(serverVoices);
       setVoicesStatus('ready');
     } catch {
       setVoicesStatus('offline');
@@ -250,13 +264,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Created stories live on the server; favorite, progress and delete stay on this device, by id.
+  // Offline keeps what is shown and tries again on app foreground and every few seconds.
+  const refreshingStoriesRef = useRef(false);
+  // Bumped when the user deletes or creates a story; a refresh that started before then is stale.
+  const storiesVersionRef = useRef(0);
+  const refreshStories = async () => {
+    if (refreshingStoriesRef.current) return;
+    refreshingStoriesRef.current = true;
+    const wasOffline = storiesStatusRef.current === 'offline';
+    const startVersion = storiesVersionRef.current;
+    let stale = false;
+    try {
+      const [serverStories, deletedIds, changes] = await Promise.all([
+        fetchStories(),
+        getDeletedStoryIds(),
+        getStoryChanges(),
+      ]);
+      if (wasOffline) {
+        setStoriesStatus('loading');
+        await wait(RECONNECT_LOADING_MS);
+      }
+      // The list changed while this refresh waited: its data would undo that change, so fetch again.
+      if (storiesVersionRef.current !== startVersion) {
+        stale = true;
+        return;
+      }
+      const deleted = new Set(deletedIds);
+      // Only the server's list, in its order: stories saved on this device are not shown.
+      setStories((currentStories) => {
+        const liveStories = new Map(currentStories.map((story) => [story.id, story]));
+        return serverStories
+          .filter((story) => !deleted.has(story.id))
+          .map((story) => ({
+            ...story,
+            ...withoutProgress(changes[story.id]),
+            ...localEdits(liveStories.get(story.id)),
+            id: story.id,
+          }));
+      });
+      setStoriesStatus('ready');
+    } catch {
+      setStoriesStatus('offline');
+    } finally {
+      refreshingStoriesRef.current = false;
+      if (stale) void refreshStories();
+    }
+  };
+
   useEffect(() => {
     void refreshVoices();
+    void refreshStories();
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void refreshVoices();
+      if (state === 'active') {
+        void refreshVoices();
+        void refreshStories();
+      }
     });
     return () => subscription.remove();
   }, []);
+
+  // Server unreachable: keep trying, so the lists come back on their own once it is up again.
+  const isOffline = voicesStatus === 'offline' || storiesStatus === 'offline';
+  useEffect(() => {
+    if (!isOffline) return;
+    const interval = setInterval(() => {
+      if (AppState.currentState !== 'active') return;
+      if (voicesStatus === 'offline') void refreshVoices();
+      if (storiesStatus === 'offline') void refreshStories();
+    }, RECONNECT_POLL_MS);
+    return () => clearInterval(interval);
+  }, [isOffline, voicesStatus, storiesStatus]);
 
   useEffect(() => {
     if (currentScreen === 'Voices') void refreshVoices();
@@ -280,24 +358,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (activeStory) setLastPlayedStoryId(activeStory.id);
   }, [activeStory?.id]);
 
+  // Progress stays in memory only (resume within this session); a refresh / restart starts at 0.
   useEffect(() => {
     if (!activeStory || isPreparingAudio) return;
     const storyId = activeStory.id;
     const time = currentTime;
+    // The playing voice's length: progress is on its timeline (each voice reads at its own pace).
+    const length = duration;
     // Same list when nothing changed, so React skips the re-render.
     setStories((prev) => {
       const index = prev.findIndex((item) => item.id === storyId);
-      if (index < 0 || prev[index].progress === time) return prev;
-      markTouched(storyId, ['progress']);
+      if (index < 0) return prev;
+      const story = prev[index];
+      if (story.progress === time && story.progressDuration === length) return prev;
+      markTouched(storyId, ['progress', 'progressDuration']);
       const next = [...prev];
-      next[index] = { ...prev[index], progress: time };
+      next[index] = { ...story, progress: time, progressDuration: length };
       return next;
     });
-    const timeout = setTimeout(() => {
-      void updateStory(storyId, { progress: time });
-    }, 800);
-    return () => clearTimeout(timeout);
-  }, [currentTime, activeStory?.id, isPreparingAudio]);
+  }, [currentTime, duration, activeStory?.id, isPreparingAudio]);
 
   const defaultNarrator = voices.find((voice) => voice.id === defaultNarratorId);
 
@@ -351,9 +430,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       pausePlayback();
       setActiveStory(null);
     }
+    storiesVersionRef.current += 1;
     setStories((prev) => prev.filter((item) => item.id !== storyId));
     setLastPlayedStoryId((id) => (id === storyId ? null : id));
-    void deleteSavedStory(storyId);
     void markStoryDeleted(storyId);
   };
 
@@ -363,32 +442,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!title) throw new Error('Story title is required');
     if (!script) throw new Error('Story text is required');
 
-    const newStory: Story = {
-      id: `s_${Date.now()}`,
+    // Saved on the server only: offline, the error message reaches the form's toast.
+    const newStory = await createStoryOnServer({
+      ...input,
       title,
-      description: script.slice(0, 80),
-      category: input.category,
-      duration: estimateDuration(script),
-      narratorId: input.narratorId,
-      artwork: '📖',
-      progress: 0,
-      isFavorite: false,
       script,
-      language: input.language,
-      childName: input.childName.trim() || undefined,
-    };
+      childName: input.childName.trim(),
+    });
 
-    const saved = await saveStory(newStory);
-    if (!saved) throw new Error('Could not save story');
-
-    setStories((currentStories) => [newStory, ...currentStories]);
+    storiesVersionRef.current += 1;
+    // A refresh may already have brought this story in from the server: keep one copy.
+    setStories((currentStories) => [
+      newStory,
+      ...currentStories.filter((story) => story.id !== newStory.id),
+    ]);
     // The narrator picked in the form is an explicit choice: it becomes the global default.
     // 'none': playStory below starts the new story, so the old one must not restart first.
     if (input.narratorId !== defaultNarratorId) {
       setDefaultNarrator(input.narratorId, 'none');
       syncDefaultVoice(input.narratorId);
     }
+    setActiveAlbum(null);
     playStory(newStory, true);
+  };
+
+  const playInAllStories = (story: Story, autoPlay?: boolean) => {
+    setActiveAlbum(null);
+    playStory(story, autoPlay);
+  };
+
+  const playFromAlbum = (language: StoryLanguage, story: Story) => {
+    setActiveAlbum(language);
+    playStory(story, true);
   };
 
   return (
@@ -400,6 +485,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         voices,
         voicesStatus,
         refreshVoices,
+        storiesStatus,
+        refreshStories,
         stories,
         activeStory,
         lastPlayedStoryId,
@@ -413,7 +500,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         saveSleepMode,
         isRepeat,
         toggleRepeat,
-        playStory,
+        playStory: playInAllStories,
+        activeAlbum,
+        playFromAlbum,
         togglePlayPause,
         pausePlayback,
         seekTo,

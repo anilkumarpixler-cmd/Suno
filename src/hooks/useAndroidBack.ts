@@ -18,6 +18,7 @@ const BACK_TARGET: Record<Exclude<RootScreen, 'Home'>, RootScreen> = {
   NowPlaying: 'Home',
   AddVoice: 'Voices',
   Favorites: 'NowPlaying',
+  Albums: 'NowPlaying',
   SleepTimer: 'Profile',
   Appearance: 'Profile',
 };

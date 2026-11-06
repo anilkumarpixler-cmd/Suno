@@ -4,6 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '@/Context/AppContext';
 import { Header } from '@/components/Common/header';
+import { BouncingDots } from '@/components/Common/BouncingDots';
 import { StoryCard } from '@/components/Common/Home/StoryCart';
 import { showToast } from '@/components/Common/Toast';
 import { ConfirmModal } from '@/modal/confirmModal';
@@ -22,6 +23,7 @@ export const HomeScreen: React.FC = () => {
     setCurrentScreen,
     lastPlayedStoryId,
     deleteStory,
+    storiesStatus,
   } = useApp();
   const { gradients, colors } = useAppTheme();
   const styles = useThemedStyles(makeStyles);
@@ -88,7 +90,9 @@ export const HomeScreen: React.FC = () => {
             </LinearGradient>
 
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Stories for {child.name}</Text>
+              <Text style={styles.sectionTitle}>
+                {child.name ? `Stories for` : 'Your stories'}
+              </Text>
               <TouchableOpacity
                 accessibilityLabel="Create a story"
                 accessibilityRole="button"
@@ -143,14 +147,23 @@ export const HomeScreen: React.FC = () => {
         }
         // Only when the category has none: the one in "Continue listening" is left out of this list.
         ListEmptyComponent={
-          filteredStories.length === 0 ? (
+          filteredStories.length > 0 ? null : storiesStatus === 'loading' ? (
+            <View style={styles.loading}>
+              <BouncingDots accessibilityLabel="Loading stories" />
+            </View>
+          ) : storiesStatus === 'offline' ? (
+            // No Retry: the app reconnects on its own once the server is back.
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>Server not connected</Text>
+            </View>
+          ) : (
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>
                 {selectedCategory === 'All' ? 'No stories yet' : `No ${selectedCategory} stories yet`}
               </Text>
               <Text style={styles.emptySub}>Tap + Create to make one.</Text>
             </View>
-          ) : null
+          )
         }
         renderItem={({ item: story }) => (
           <StoryCard
@@ -178,7 +191,8 @@ export default HomeScreen;
 const makeStyles = (colors: ThemeColors) => ({
   container: { flex: 1, backgroundColor: colors.background },
   // Extra bottom space so the last story clears the mini player.
-  scrollContent: { padding: spacing.md, paddingBottom: 140 },
+  // flexGrow: the loader can fill the space left under the header and sit in its middle.
+  scrollContent: { padding: spacing.md, paddingBottom: 140, flexGrow: 1 },
   avatarBtn: {
     width: 36,
     height: 36,
@@ -239,6 +253,7 @@ const makeStyles = (colors: ThemeColors) => ({
   activePillText: { color: colors.onPrimary },
   section: { marginTop: spacing.xs },
   empty: { alignItems: 'center' as const, paddingHorizontal: spacing.lg, paddingVertical: spacing.xl },
+  loading: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const },
   emptyTitle: {
     ...theme.typography.section,
     color: colors.textDark,

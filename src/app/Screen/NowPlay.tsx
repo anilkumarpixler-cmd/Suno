@@ -5,6 +5,9 @@ import {
   TouchableOpacity,
   ScrollView,
   PanResponder,
+  Share,
+  Modal,
+  Pressable,
   useWindowDimensions,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -17,6 +20,8 @@ import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PLAYBACK_SPEEDS } from '@/hooks/useStoryPlayer';
 import { NarratorCard } from '@/components/Common/NarratorCard';
+import { StoryArt } from '@/components/Common/StoryArt';
+import { albumLabel } from '@/Data/albums';
 
 const formatTime = (seconds: number) => {
   const m = Math.floor(seconds / 60);
@@ -44,14 +49,31 @@ export const NowPlayingScreen: React.FC = () => {
     setPlaybackSpeed,
     isRepeat,
     toggleRepeat,
+    activeAlbum,
   } = useApp();
   const { gradients, colors } = useAppTheme();
   const styles = useThemedStyles(makeStyles);
   // Landscape: a smaller artwork so the title and controls stay in view on the short screen.
-  const { height: windowHeight } = useWindowDimensions();
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const artSize = Math.min(220, Math.round(windowHeight * 0.4));
   const [speedOpen, setSpeedOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // The ⋮ menu opens over the whole screen (outside tap / Back close it, nothing behind gets the
+  // tap), so its box is placed under the ⋮ button from where that button is on screen.
+  const menuAnchorRef = useRef<View>(null);
+  const [menuPosition, setMenuPosition] = useState({ top: 56, right: spacing.sm });
+  const openMenu = () => {
+    const anchor = menuAnchorRef.current;
+    if (!anchor) {
+      setMenuOpen(true);
+      return;
+    }
+    anchor.measureInWindow((x, y, width, height) => {
+      if (width > 0) setMenuPosition({ top: y + height + 4, right: Math.max(spacing.sm, windowWidth - (x + width)) });
+      setMenuOpen(true);
+    });
+  };
+  const closeMenu = () => setMenuOpen(false);
   const barRef = useRef<View>(null);
   const barWidthRef = useRef(1);
   const barPageXRef = useRef(0);
@@ -113,6 +135,21 @@ export const NowPlayingScreen: React.FC = () => {
     });
   };
 
+  // The story as text: its audio lives on the PC's local server, so a link wouldn't open elsewhere.
+  const handleShare = async () => {
+    setMenuOpen(false);
+    const forChild = activeStory.childName ? `A story for ${activeStory.childName}\n\n` : '';
+    try {
+      // Closing the share sheet resolves too (dismissedAction): only a real failure shows a toast.
+      await Share.share({
+        title: activeStory.title,
+        message: `${activeStory.title}\n${forChild}\n${activeStory.script}\n\nShared from Suno Stories`,
+      });
+    } catch {
+      showToast('Could not share this story', 'error');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <Header
@@ -120,39 +157,72 @@ export const NowPlayingScreen: React.FC = () => {
         onBack={() => setCurrentScreen('Home')}
         title="Now Playing"
         rightElement={
-          <View style={styles.menuWrap}>
+          <View ref={menuAnchorRef} collapsable={false} style={styles.menuWrap}>
             <TouchableOpacity
               style={styles.moreBtn}
-              onPress={() => setMenuOpen((open) => !open)}
+              onPress={openMenu}
               accessibilityRole="button"
               accessibilityLabel="More options"
               accessibilityState={{ expanded: menuOpen }}>
               <MaterialIcons name="more-vert" size={24} color={colors.textDark} />
             </TouchableOpacity>
-            {menuOpen ? (
-              <View style={styles.menu}>
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={() => {
-                    setMenuOpen(false);
-                    setCurrentScreen('Favorites');
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Favorites">
-                  <MaterialIcons name="favorite" size={18} color={colors.primary} />
-                  <Text style={styles.menuItemText}>Favorites</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
           </View>
         }
       />
+
+      {/* Same box as before, faded in over a clear layer: a tap outside or Back closes it. */}
+      <Modal
+        visible={menuOpen}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        supportedOrientations={['portrait', 'landscape']}
+        onRequestClose={closeMenu}>
+        <Pressable
+          style={styles.menuBackdrop}
+          onPress={closeMenu}
+          accessibilityRole="button"
+          accessibilityLabel="Close menu"
+        />
+        <View style={[styles.menu, menuPosition]}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => {
+              closeMenu();
+              setCurrentScreen('Favorites');
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Favorites">
+            <MaterialIcons name="favorite" size={18} color={colors.primary} />
+            <Text style={styles.menuItemText}>Favorites</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => {
+              closeMenu();
+              setCurrentScreen('Albums');
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Albums">
+            <MaterialIcons name="library-music" size={18} color={colors.primary} />
+            <Text style={styles.menuItemText}>Albums</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
 
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         onScrollBeginDrag={() => setMenuOpen(false)}>
         <View style={styles.playerCard}>
+          <TouchableOpacity
+            style={styles.shareBtn}
+            onPress={handleShare}
+            accessibilityRole="button"
+            accessibilityLabel={`Share ${activeStory.title}`}>
+            <MaterialIcons name="share" size={22} color={colors.playerText} />
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.heartBtn}
             onPress={() => {
@@ -174,14 +244,22 @@ export const NowPlayingScreen: React.FC = () => {
           <LinearGradient
             colors={gradients.playerArt}
             style={[styles.artBox, { width: artSize, height: artSize }]}>
-            <Text style={[styles.artEmoji, { fontSize: Math.round(artSize * 0.44) }]}>
-              {activeStory.artwork}
-            </Text>
+            <StoryArt
+              category={activeStory.category}
+              emoji={activeStory.artwork}
+              size={Math.round(artSize * 0.5)}
+            />
           </LinearGradient>
 
           <Text style={styles.title} numberOfLines={2}>
             {activeStory.title}
           </Text>
+          {/* Next / Previous stay inside this album. */}
+          {activeAlbum ? (
+            <Text style={styles.albumTag} numberOfLines={1}>
+              {`${albumLabel(activeAlbum)} album`}
+            </Text>
+          ) : null}
           <Text style={styles.subtitle} numberOfLines={1}>
             {isPreparingAudio
               ? narrator
@@ -355,6 +433,14 @@ const makeStyles = (colors: ThemeColors) => ({
     zIndex: 30,
     elevation: 8,
   },
+  // Clear, full screen under the open menu: catches the outside tap that closes it.
+  menuBackdrop: {
+    position: 'absolute' as const,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  },
   menuItem: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -383,6 +469,17 @@ const makeStyles = (colors: ThemeColors) => ({
     justifyContent: 'center' as const,
     zIndex: 2,
   },
+  // Mirrors the heart on the card's other corner.
+  shareBtn: {
+    position: 'absolute' as const,
+    top: spacing.sm,
+    left: spacing.sm,
+    width: 40,
+    height: 40,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    zIndex: 2,
+  },
   artBox: {
     width: 220,
     height: 220,
@@ -391,7 +488,6 @@ const makeStyles = (colors: ThemeColors) => ({
     justifyContent: 'center' as const,
     marginBottom: spacing.lg,
   },
-  artEmoji: { fontSize: 96 },
 
   title: {
     ...theme.typography.hero,
@@ -400,6 +496,12 @@ const makeStyles = (colors: ThemeColors) => ({
     color: colors.playerText,
     textAlign: 'center' as const,
     paddingHorizontal: spacing.sm,
+  },
+  albumTag: {
+    ...theme.typography.badge,
+    color: colors.playerMuted,
+    marginTop: 6,
+    textAlign: 'center' as const,
   },
   subtitle: {
     ...theme.typography.body,

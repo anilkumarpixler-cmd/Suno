@@ -2,11 +2,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Story } from '../Types';
 
 export const STORIES_STORAGE_KEY = '@suno_stories';
-// Ids of deleted stories: the built-in stories come from mockData, not storage, and would
-// otherwise come back on the next start.
+// Ids of deleted stories: server stories come from the server, not storage, and would
+// otherwise come back on the next start (the server has no delete).
 const DELETED_STORIES_STORAGE_KEY = '@suno_deleted_stories';
-// Changes to built-in stories (favorite, progress, cloned audio), by id. Those stories aren't in
-// the saved list, so their changes are kept here and applied on top of mockData at start.
+// Changes to server stories (favorite, progress, cloned audio), by id. Those stories aren't in
+// the saved list, so their changes are kept here and applied on top of the server's list.
 const STORY_CHANGES_STORAGE_KEY = '@suno_story_changes';
 
 export type StoryChanges = Record<string, Partial<Story>>;

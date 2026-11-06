@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '@/Context/AppContext';
 import { CustomDropdown } from '@/components/Common/CustomDropdown';
+import { Header } from '@/components/Common/header';
 import { borderRadius, spacing, theme, ThemeColors } from '@/Theme/Index';
 import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 import { StoryLanguage } from '@/Types';
@@ -54,7 +55,13 @@ const CustomTextInput: React.FC<{
   );
 };
 
-type FieldErrors = { childName?: string; title?: string; topic?: string };
+type FieldErrors = {
+  childName?: string;
+  age?: string;
+  title?: string;
+  topic?: string;
+  storyType?: string;
+};
 
 const HeroCard: React.FC<{ childName: string }> = ({ childName }) => {
   const styles = useThemedStyles(makeStyles);
@@ -65,7 +72,7 @@ const HeroCard: React.FC<{ childName: string }> = ({ childName }) => {
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={styles.heroCard}>
-      <Text style={styles.heroTitle}>{`A story made just for\n${childName}.`}</Text>
+      <Text style={styles.heroTitle} numberOfLines={2} ellipsizeMode="tail">{`A story made just for\n${childName.trim() || 'your child'}.`}</Text>
       <Text style={styles.heroDescription}>
         Choose a few details and Suno creates a{`\n`}personalized story in your chosen family
         {`\n`}voice.
@@ -106,19 +113,24 @@ const LanguageSelector: React.FC<{
 };
 
 export const CreateStoryScreen: React.FC = () => {
-  const { child, voices, stories, defaultNarratorId, createNewStory, setCurrentScreen } = useApp();
+  const { voices, stories, defaultNarratorId, createNewStory, setCurrentScreen } = useApp();
   const styles = useThemedStyles(makeStyles);
   const { colors } = useAppTheme();
-  const [childName, setChildName] = useState(child.name || 'Aarav');
-  const [age, setAge] = useState('3 years');
+  // A clean form every time: no name or age carried over from the last story.
+  const [childName, setChildName] = useState('');
+  const [age, setAge] = useState('');
   const [language, setLanguage] = useState<StoryLanguage>('Hindi');
   const [title, setTitle] = useState('');
   const [topic, setTopic] = useState('');
-  const [storyType, setStoryType] = useState('Bedtime adventure');
+  const [storyType, setStoryType] = useState('');
   const [narratorId, setNarratorId] = useState(defaultNarratorId);
   const [openDropdown, setOpenDropdown] = useState<DropdownKey | null>(null);
   const [duplicateTitle, setDuplicateTitle] = useState<string | null>(null);
   const [errors, setErrors] = useState<FieldErrors>({});
+  // One story per tap: further taps while it saves are ignored. Ref, not state: a second tap
+  // can arrive before the re-render that disables the button.
+  const creatingRef = useRef(false);
+  const [isCreating, setIsCreating] = useState(false);
 
   // Typing in a field clears its own message.
   const clearError = (field: keyof FieldErrors) =>
@@ -157,17 +169,20 @@ export const CreateStoryScreen: React.FC = () => {
   };
 
   const handleCreateStory = () => {
+    if (creatingRef.current) return;
     const storyTitle = title.trim();
     const script = topic.trim();
     // Every missing field is flagged at once, not one per tap.
     const nextErrors: FieldErrors = {
       childName: childName.trim() ? undefined : "Child's name is required",
+      age: age ? undefined : 'Please choose age',
       title: !storyTitle
         ? 'Story title is required'
         : getWordCount(storyTitle) > 20
           ? 'Story title cannot exceed 20 words'
           : undefined,
       topic: script ? undefined : 'Story topic is required',
+      storyType: storyType ? undefined : 'Please select story type',
     };
     setErrors(nextErrors);
     if (Object.values(nextErrors).some(Boolean)) {
@@ -179,136 +194,163 @@ export const CreateStoryScreen: React.FC = () => {
       return;
     }
 
+    creatingRef.current = true;
+    setIsCreating(true);
     void createNewStory({
       title: storyTitle,
       script,
       language,
       category: mapStoryTypeToCategory(storyType),
+      storyType,
+      // "3 years" -> 3
+      age: parseInt(age, 10) || undefined,
       narratorId,
       childName: childName.trim(),
     })
       .then(() => {
         showToast('Story created', 'success');
+        // Saved: the next story starts from an empty form.
+        setChildName('');
+        setAge('');
+        setTitle('');
+        setTopic('');
+        setStoryType('');
+        setErrors({});
       })
       .catch((error: unknown) => {
         showToast(error instanceof Error ? error.message : 'Could not save story', 'error');
+      })
+      .finally(() => {
+        // A failed save can be tried again.
+        creatingRef.current = false;
+        setIsCreating(false);
       });
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable
-          style={styles.backButton}
-          onPress={() => setCurrentScreen('Home')}
-          accessibilityLabel="Go back">
-          <MaterialIcons name="chevron-left" size={32} color={colors.textDark} />
-        </Pressable>
-        <Text style={styles.headerTitle}> Create a Story</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <Header showBack onBack={() => setCurrentScreen('Home')} title="Create a Story" />
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled">
-        <HeroCard childName={childName} />
+      {/* Pads by only the part of the screen the keyboard covers (edge-to-edge draws it over the app). */}
+      <KeyboardAvoidingView style={styles.keyboardArea} behavior="padding">
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets>
+          <HeroCard childName={childName} />
 
-        <View style={styles.formCard}>
-          <View style={styles.field}>
-            <FormLabel>Child's name</FormLabel>
-            <CustomTextInput
-              value={childName}
-              onChangeText={(text) => {
-                setChildName(text);
-                clearError('childName');
-              }}
-              error={errors.childName}
-            />
-          </View>
+          <View style={styles.formCard}>
+            <View style={styles.field}>
+              <FormLabel>Child's name</FormLabel>
+              <CustomTextInput
+                value={childName}
+                placeholder="Please enter child name"
+                onChangeText={(text) => {
+                  setChildName(text);
+                  clearError('childName');
+                }}
+                error={errors.childName}
+              />
+            </View>
 
-          <View style={styles.field}>
-            <CustomDropdown
-              label="Age"
-              value={age}
-              options={ageOptions}
-              isOpen={openDropdown === 'age'}
-              onToggle={() => toggleDropdown('age')}
-              onSelect={(value) => selectDropdown(setAge, value)}
-            />
-          </View>
+            <View style={styles.field}>
+              <CustomDropdown
+                label="Age"
+                value={age}
+                placeholder="Please choose age"
+                error={errors.age}
+                options={ageOptions}
+                isOpen={openDropdown === 'age'}
+                onToggle={() => toggleDropdown('age')}
+                onSelect={(value) => {
+                  selectDropdown(setAge, value);
+                  clearError('age');
+                }}
+              />
+            </View>
 
-          <View style={styles.field}>
-            <FormLabel>Story language</FormLabel>
-            <LanguageSelector selected={language} onChange={setLanguage} />
-          </View>
+            <View style={styles.field}>
+              <FormLabel>Story language</FormLabel>
+              <LanguageSelector selected={language} onChange={setLanguage} />
+            </View>
 
-          <View style={styles.field}>
-            <FormLabel>Story title</FormLabel>
-            <CustomTextInput
-              value={title}
-              placeholder="e.g. Aarav and the Moon"
-              onChangeText={handleTitleChange}
-              error={errors.title}
-            />
-          </View>
+            <View style={styles.field}>
+              <FormLabel>Story title</FormLabel>
+              <CustomTextInput
+                value={title}
+                placeholder="e.g. Aarav and the Moon"
+                onChangeText={handleTitleChange}
+                error={errors.title}
+              />
+            </View>
 
-          <View style={styles.field}>
-            <FormLabel>What should the story be about?</FormLabel>
-            <CustomTextInput
-              value={topic}
-              placeholder="Write the story here, e.g. dinosaurs, moon, jungle"
-              onChangeText={(text) => {
-                setTopic(text);
-                clearError('topic');
-              }}
-              multiline
-              error={errors.topic}
-            />
-          </View>
+            <View style={styles.field}>
+              <FormLabel>What should the story be about?</FormLabel>
+              <CustomTextInput
+                value={topic}
+                placeholder="Write the story here, e.g. dinosaurs, moon, jungle"
+                onChangeText={(text) => {
+                  setTopic(text);
+                  clearError('topic');
+                }}
+                multiline
+                error={errors.topic}
+              />
+            </View>
 
-          <View style={styles.field}>
-            <CustomDropdown
-              label="Story type"
-              value={storyType}
-              options={storyTypeOptions}
-              isOpen={openDropdown === 'storyType'}
-              onToggle={() => toggleDropdown('storyType')}
-              onSelect={(value) => selectDropdown(setStoryType, value)}
-            />
-          </View>
+            <View style={styles.field}>
+              <CustomDropdown
+                label="Story type"
+                value={storyType}
+                placeholder="Please select story type"
+                error={errors.storyType}
+                options={storyTypeOptions}
+                isOpen={openDropdown === 'storyType'}
+                onToggle={() => toggleDropdown('storyType')}
+                onSelect={(value) => {
+                  selectDropdown(setStoryType, value);
+                  clearError('storyType');
+                }}
+              />
+            </View>
 
-          <View style={styles.lastField}>
-            <CustomDropdown
-              label="Narrator"
-              value={
-                selectedNarrator
-                  ? `${selectedNarrator.avatar} ${selectedNarrator.name}`
-                  : 'System Voice'
-              }
-              options={narratorOptions}
-              isOpen={openDropdown === 'narrator'}
-              onToggle={() => toggleDropdown('narrator')}
-              onSelect={(value) => {
-                if (value === 'System Voice') {
-                  selectDropdown(setNarratorId, '');
-                  return;
+            <View style={styles.lastField}>
+              <CustomDropdown
+                label="Narrator"
+                value={
+                  selectedNarrator
+                    ? `${selectedNarrator.avatar} ${selectedNarrator.name}`
+                    : 'System Voice'
                 }
-                const voice = voices.find((item) => `${item.avatar} ${item.name}` === value);
-                if (voice) selectDropdown(setNarratorId, voice.id);
-              }}
-            />
-          </View>
+                options={narratorOptions}
+                isOpen={openDropdown === 'narrator'}
+                onToggle={() => toggleDropdown('narrator')}
+                onSelect={(value) => {
+                  if (value === 'System Voice') {
+                    selectDropdown(setNarratorId, '');
+                    return;
+                  }
+                  const voice = voices.find((item) => `${item.avatar} ${item.name}` === value);
+                  if (voice) selectDropdown(setNarratorId, voice.id);
+                }}
+              />
+            </View>
 
-          <Pressable
-            style={styles.createButton}
-            onPress={handleCreateStory}
-            accessibilityRole="button">
-            <MaterialIcons name="auto-awesome" size={20} color={colors.onPrimary} />
-            <Text style={styles.createButtonText}>Create personalized story</Text>
-          </Pressable>
-        </View>
-      </ScrollView>
+            <Pressable
+              style={[styles.createButton, isCreating && styles.createButtonDisabled]}
+              onPress={handleCreateStory}
+              disabled={isCreating}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: isCreating }}>
+              <MaterialIcons name="auto-awesome" size={20} color={colors.onPrimary} />
+              <Text style={styles.createButtonText}>
+                {isCreating ? 'Creating…' : 'Create personalized story'}
+              </Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <ConfirmModal
         visible={duplicateTitle !== null}
@@ -325,25 +367,11 @@ export default CreateStoryScreen;
 
 const makeStyles = (colors: ThemeColors) => ({
   container: { flex: 1, backgroundColor: colors.background },
-  header: {
-    height: 58,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    paddingHorizontal: 22,
-  },
-  backButton: {
-    width: 36,
-    height: 36,
-    alignItems: 'flex-start' as const,
-    justifyContent: 'center' as const,
-  },
-  headerTitle: { color: colors.textDark, ...theme.typography.screenTitle },
-  headerSpacer: { width: 36 },
+  keyboardArea: { flex: 1 },
   // Extra bottom space so the Create button clears the mini player.
   content: { paddingHorizontal: 16, paddingTop: 28, paddingBottom: 140 },
   heroCard: {
-    height: 194,
+    minHeight: 194,
     borderRadius: 28,
     paddingHorizontal: 22,
     paddingVertical: 24,
@@ -403,5 +431,6 @@ const makeStyles = (colors: ThemeColors) => ({
     flexDirection: 'row' as const,
     gap: 8,
   },
+  createButtonDisabled: { opacity: 0.5 },
   createButtonText: { ...theme.typography.section, color: colors.onPrimary },
 });

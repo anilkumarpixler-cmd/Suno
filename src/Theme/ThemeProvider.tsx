@@ -2,23 +2,33 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Appearance, StyleSheet, useColorScheme, View } from 'react-native';
-import { ColorScheme, palettes, ThemeColors } from './Index';
+import {
+  buildPalette,
+  ColorScheme,
+  Gradients,
+  palettes,
+  THEME_ACCENTS,
+  ThemeAccent,
+  ThemeColors,
+} from './Index';
 
 export type AppearanceMode = 'light' | 'dark' | 'system';
 
 const STORAGE_KEY = '@suno_appearance';
+const ACCENT_STORAGE_KEY = '@suno_theme_color';
 
 export const appearanceLabel = (mode: AppearanceMode) =>
   ({ system: 'Match device', light: 'Light', dark: 'Dark' })[mode];
 
-type Gradients = (typeof palettes)[ColorScheme]['gradients'];
-
 type ThemeContextValue = {
   mode: AppearanceMode;
   scheme: ColorScheme;
+  /** Theme color: buttons, highlights and gradients. */
+  accent: ThemeAccent;
   colors: ThemeColors;
   gradients: Gradients;
   setMode: (mode: AppearanceMode) => void;
+  setAccent: (accent: ThemeAccent) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
@@ -26,11 +36,16 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 const parseMode = (value: string | null): AppearanceMode =>
   value === 'light' || value === 'dark' || value === 'system' ? value : 'system';
 
+const parseAccent = (value: string | null): ThemeAccent =>
+  THEME_ACCENTS.includes(value as ThemeAccent) ? (value as ThemeAccent) : 'purple';
+
 let cachedMode: AppearanceMode | null = null;
+let cachedAccent: ThemeAccent = 'purple';
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const system = useColorScheme();
   const [mode, setModeState] = useState<AppearanceMode>(cachedMode ?? 'system');
+  const [accent, setAccentState] = useState<ThemeAccent>(cachedAccent);
   const [ready, setReady] = useState(cachedMode !== null);
 
   useEffect(() => {
@@ -39,12 +54,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return;
     }
     let cancelled = false;
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((savedMode) => {
+    AsyncStorage.multiGet([STORAGE_KEY, ACCENT_STORAGE_KEY])
+      .then(([[, savedMode], [, savedAccent]]) => {
         if (cancelled) return;
         const next = parseMode(savedMode);
         cachedMode = next;
+        cachedAccent = parseAccent(savedAccent);
         setModeState(next);
+        setAccentState(cachedAccent);
         setReady(true);
       })
       .catch(() => {
@@ -61,9 +78,15 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     void AsyncStorage.setItem(STORAGE_KEY, next);
   };
 
+  const setAccent = (next: ThemeAccent) => {
+    cachedAccent = next;
+    setAccentState(next);
+    void AsyncStorage.setItem(ACCENT_STORAGE_KEY, next);
+  };
+
   const scheme: ColorScheme =
     mode === 'system' ? (system === 'dark' ? 'dark' : 'light') : mode;
-  const palette = palettes[scheme];
+  const palette = useMemo(() => buildPalette(scheme, accent), [scheme, accent]);
 
   useEffect(() => {
     if (!ready) return;
@@ -74,11 +97,13 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     () => ({
       mode,
       scheme,
+      accent,
       colors: palette.colors,
       gradients: palette.gradients,
       setMode,
+      setAccent,
     }),
-    [mode, scheme, palette],
+    [mode, scheme, accent, palette],
   );
 
   if (!ready) {

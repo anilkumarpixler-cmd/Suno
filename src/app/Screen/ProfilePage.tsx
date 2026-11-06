@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/components/Common/header';
 import { showToast } from '@/components/Common/Toast';
 import { useApp, VoicesStatus } from '@/Context/AppContext';
+import { ConfirmModal } from '@/modal/confirmModal';
 import { formatDays, formatTime, SleepModeSettings } from '@/services/sleepMode';
-import { theme, ThemeColors } from '@/Theme/Index';
+import { accents, theme, ThemeColors } from '@/Theme/Index';
 import { appearanceLabel, useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
 import { RootScreen } from '@/Types';
 
@@ -55,8 +56,8 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ name, age, avatar, onE
         <Text style={styles.avatar}>{avatar}</Text>
       </View>
       <View style={styles.profileDetails}>
-        <Text style={styles.profileName}>{name}</Text>
-        <Text style={styles.profileAge}>{age}</Text>
+        <Text style={styles.profileName}>hello</Text>
+        <Text style={styles.profileAge}>23</Text>
       </View>
       <Pressable
         style={styles.editButton}
@@ -128,8 +129,15 @@ const familyVoicesLabel = (count: number, status: VoicesStatus) => {
 
 export const ProfileScreen: React.FC = () => {
   const { child, setCurrentScreen, sleepMode, voices, voicesStatus } = useApp();
-  const { mode, scheme } = useAppTheme();
+  const { mode, scheme, accent, colors } = useAppTheme();
   const styles = useThemedStyles(makeStyles);
+  const [logoutVisible, setLogoutVisible] = useState(false);
+
+  // The app has no sign-in yet: the button and its pop-up are in place for when it does.
+  const handleLogout = () => {
+    setLogoutVisible(false);
+    showToast('Logout will be available once sign-in is added.');
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -138,15 +146,15 @@ export const ProfileScreen: React.FC = () => {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}>
         <ProfileCard
-          name="Aarav"
-          age="3 years old"
+          name={child.name || 'Your child'}
+          age={child.age ? `${child.age} ${child.age === 1 ? 'year' : 'years'} old` : ''}
           avatar={child.avatar || '🧒'}
           onEdit={() => showToast('Child Profile Editing.')}
         />
         <SectionTitle>Settings</SectionTitle>
         <SettingsCard
           title="Appearance"
-          subtitle={`${appearanceLabel(mode)} · ${scheme === 'dark' ? 'Dark' : 'Light'}`}
+          subtitle={`${appearanceLabel(mode)} · ${scheme === 'dark' ? 'Dark' : 'Light'} · ${accents[accent].label}`}
           icon={scheme === 'dark' ? 'moon' : 'sun'}
           onPress={() => setCurrentScreen('Appearance')}
         />
@@ -169,7 +177,23 @@ export const ProfileScreen: React.FC = () => {
             }}
           />
         ))}
+        <Pressable
+          style={styles.logoutButton}
+          onPress={() => setLogoutVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Log out">
+          <MaterialIcons name="logout" size={22} color={colors.danger} />
+          <Text style={styles.logoutText}>Log out</Text>
+        </Pressable>
       </ScrollView>
+      <ConfirmModal
+        visible={logoutVisible}
+        title="Log out?"
+        message="Are you sure you want to log out of Suno?"
+        confirmLabel="Log out"
+        onCancel={() => setLogoutVisible(false)}
+        onConfirm={handleLogout}
+      />
     </SafeAreaView>
   );
 };
@@ -259,6 +283,18 @@ const makeStyles = (colors: ThemeColors) => ({
   settingTitle: { ...theme.typography.section, color: colors.textDark },
   settingSubtitle: { ...theme.typography.body, color: colors.textMuted, marginTop: 4 },
   chevron: { marginLeft: 10 },
+  logoutButton: {
+    minHeight: 56,
+    marginTop: 19,
+    borderRadius: 21,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    backgroundColor: colors.cardBg,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  logoutText: { ...theme.typography.section, color: colors.danger, marginLeft: 8 },
   placeholder: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, padding: 20 },
   placeholderTitle: { ...theme.typography.cardTitle, color: colors.textDark },
   placeholderText: { ...theme.typography.body, color: colors.textMuted, marginTop: 8 },

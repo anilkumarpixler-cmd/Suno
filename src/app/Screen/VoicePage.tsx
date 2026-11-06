@@ -1,17 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, View, Text } from 'react-native';
+import { Alert, Pressable, ScrollView, TextInput, View, Text } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp } from '@/Context/AppContext';
 import { spacing, theme, ThemeColors } from '@/Theme/Index';
 import { useAppTheme, useThemedStyles } from '@/Theme/ThemeProvider';
+import { BouncingDots } from '@/components/Common/BouncingDots';
 import { showToast } from '@/components/Common/Toast';
 import { Voice } from '@/Types';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { ConfirmModal } from '@/modal/confirmModal';
 import { PreviewModal } from '@/modal/previewModal';
 import { claimMedia, releaseMedia } from '@/services/activeMedia';
+import { normalize } from '@/storage/searchHistory';
+
+const SYSTEM_VOICE_NAME = 'System Voice';
 
 interface VoiceCardProps {
   voice: Voice;
@@ -55,7 +59,7 @@ const VoiceCard: React.FC<VoiceCardProps> = ({
   <View style={styles.voiceCard}>
     <View style={styles.voiceTopRow}>
       <View style={styles.avatarCircle}>
-        <Text style={styles.avatarEmoji}>{voice.avatar}</Text>
+        <MaterialIcons name="record-voice-over" size={28} color={colors.primary} />
       </View>
       <View style={styles.voiceDetails}>
         <Text style={styles.voiceName}>{voice.name}</Text>
@@ -111,7 +115,6 @@ export const FamilyVoicesScreen: React.FC = () => {
   const {
     voices,
     voicesStatus,
-    refreshVoices,
     defaultNarratorId,
     setDefaultVoice,
     setCurrentScreen,
@@ -224,6 +227,17 @@ export const FamilyVoicesScreen: React.FC = () => {
   };
 
   const visibleVoices = voices.filter((voice) => !deletingIds.includes(voice.id));
+  const listedVoices = isPicker
+    ? visibleVoices.filter((voice) => Boolean(voice.audioUri))
+    : visibleVoices;
+
+  // Search by the voice's name only ("pa" finds "Papa"); case and extra spaces don't matter.
+  const [query, setQuery] = useState('');
+  const normalizedQuery = normalize(query);
+  const nameMatches = (name: string) => !normalizedQuery || normalize(name).includes(normalizedQuery);
+  const shownVoices = listedVoices.filter((voice) => nameMatches(voice.name));
+  const showSystemVoice = nameMatches(SYSTEM_VOICE_NAME);
+  const noMatches = Boolean(normalizedQuery) && shownVoices.length === 0 && !showSystemVoice;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -245,7 +259,11 @@ export const FamilyVoicesScreen: React.FC = () => {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
         <LinearGradient
           colors={gradients.hero}
           start={{ x: 0, y: 0 }}
@@ -258,6 +276,33 @@ export const FamilyVoicesScreen: React.FC = () => {
         </LinearGradient>
 
         <Text style={styles.sectionTitle}>{isPicker ? 'Choose narrator' : 'Your voices'}</Text>
+
+        {/* Only once there are family voices to search. */}
+        {listedVoices.length > 0 && (
+          <View style={styles.searchBox}>
+            <MaterialIcons name="search" size={22} color={colors.textMuted} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search voices by name"
+              placeholderTextColor={colors.placeholder}
+              selectionColor={colors.primary}
+              autoCorrect={false}
+              returnKeyType="search"
+              accessibilityLabel="Search voices by name"
+            />
+            {query !== '' && (
+              <Pressable
+                style={styles.clearButton}
+                onPress={() => setQuery('')}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search">
+                <MaterialIcons name="close" size={20} color={colors.textMuted} />
+              </Pressable>
+            )}
+          </View>
+        )}
 
         
           <PreviewModal
@@ -281,41 +326,47 @@ export const FamilyVoicesScreen: React.FC = () => {
           />
 
         {/* Always first: the device voice is the default narrator until a family voice is chosen. */}
-        <Pressable
-          style={styles.voiceCard}
-          onPress={() => {
-            if (isPicker) {
-              selectNarrator('');
-              showToast('Using system voice', 'success');
-              setCurrentScreen('NowPlaying');
-              return;
-            }
-            if (!selectedVoiceId) return;
-            setDefaultVoice('');
-            showToast('System Voice is now your default narrator', 'success');
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Use system voice">
-          <View style={styles.voiceTopRow}>
-            <View style={styles.avatarCircle}>
-              <MaterialIcons name="volume-up" size={28} color={colors.primary} />
-            </View>
-            <View style={styles.voiceDetails}>
-              <Text style={styles.voiceName}>System Voice</Text>
-              <Text style={styles.metaText}>Device speech · no cloning</Text>
-            </View>
-            {!selectedVoiceId && (
-              <View style={styles.defaultStatus} accessibilityLabel="System Voice selected">
-                <MaterialIcons name="check" size={18} color={colors.onPrimary} />
+        {showSystemVoice && (
+          <Pressable
+            style={styles.voiceCard}
+            onPress={() => {
+              if (isPicker) {
+                selectNarrator('');
+                showToast('Using system voice', 'success');
+                setCurrentScreen('NowPlaying');
+                return;
+              }
+              if (!selectedVoiceId) return;
+              setDefaultVoice('');
+              showToast('System Voice is now your default narrator', 'success');
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Use system voice">
+            <View style={styles.voiceTopRow}>
+              <View style={styles.avatarCircle}>
+                <MaterialIcons name="volume-up" size={28} color={colors.primary} />
               </View>
-            )}
-          </View>
-        </Pressable>
+              <View style={styles.voiceDetails}>
+                <Text style={styles.voiceName}>{SYSTEM_VOICE_NAME}</Text>
+                <Text style={styles.metaText}>Device speech · no cloning</Text>
+              </View>
+              {!selectedVoiceId && (
+                <View style={styles.defaultStatus} accessibilityLabel="System Voice selected">
+                  <MaterialIcons name="check" size={18} color={colors.onPrimary} />
+                </View>
+              )}
+            </View>
+          </Pressable>
+        )}
 
-        {(isPicker
-          ? visibleVoices.filter((voice) => Boolean(voice.audioUri))
-          : visibleVoices
-        ).map((voice) => (
+        {noMatches && (
+          <View style={styles.voiceCard}>
+            <Text style={styles.voiceName}>{`No voices named "${query.trim()}"`}</Text>
+            <Text style={styles.metaText}>Try a different name.</Text>
+          </View>
+        )}
+
+        {shownVoices.map((voice) => (
           <VoiceCard
             key={voice.id}
             voice={voice}
@@ -328,22 +379,16 @@ export const FamilyVoicesScreen: React.FC = () => {
 
         {visibleVoices.length === 0 && (
           <View style={styles.voiceCard}>
+            {/* No Retry: the app reconnects on its own once the server is back. */}
             {voicesStatus === 'offline' ? (
               <>
                 <Text style={styles.voiceName}>Server not connected</Text>
                 <Text style={styles.metaText}>Your family voices will appear once it's back.</Text>
-                <Pressable
-                  style={[styles.actionButton, styles.emptyRetry]}
-                  onPress={() => void refreshVoices()}
-                  accessibilityRole="button"
-                  accessibilityLabel="Retry loading voices">
-                  <Text style={styles.actionText}>Retry</Text>
-                </Pressable>
               </>
+            ) : voicesStatus === 'loading' ? (
+              <BouncingDots accessibilityLabel="Loading voices" />
             ) : (
-              <Text style={styles.metaText}>
-                {voicesStatus === 'loading' ? 'Loading voices…' : 'No voices yet. Tap + to record one.'}
-              </Text>
+              <Text style={styles.metaText}>No voices yet. Tap + to record one.</Text>
             )}
           </View>
         )}
@@ -421,6 +466,31 @@ const makeStyles = (colors: ThemeColors) => ({
     marginBottom: 14,
     marginLeft: 13,
   },
+  // Same box as the Search page.
+  searchBox: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: 14,
+    minHeight: 51,
+    marginBottom: 13,
+    borderRadius: 21,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.cardBg,
+  },
+  searchIcon: { marginRight: 8 },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 13,
+    color: colors.textDark,
+    ...theme.typography.body,
+  },
+  clearButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
   voiceCard: {
     backgroundColor: colors.cardBg,
     borderColor: colors.borderLight,
@@ -439,7 +509,6 @@ const makeStyles = (colors: ThemeColors) => ({
     justifyContent: 'center' as const,
     marginRight: 14,
   },
-  avatarEmoji: { fontSize: 28 },
   voiceDetails: { flex: 1 },
   voiceName: { ...theme.typography.cardTitle, color: colors.textDark },
   metaText: { ...theme.typography.body, color: colors.textMuted, marginTop: 4 },
@@ -465,7 +534,6 @@ const makeStyles = (colors: ThemeColors) => ({
     gap: 8,
   },
   actionText: { ...theme.typography.section, color: colors.textDark },
-  emptyRetry: { flex: 0, marginTop: 14 },
   addVoiceButton: {
     minHeight: 52,
     borderRadius: 15,

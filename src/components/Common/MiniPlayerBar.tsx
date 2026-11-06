@@ -4,6 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useApp } from '../../Context/AppContext';
 import { theme, ThemeColors } from '../../Theme/Index';
 import { useAppTheme, useThemedStyles } from '../../Theme/ThemeProvider';
+import { StoryArt } from './StoryArt';
 
 const formatTime = (seconds: number) => {
   const total = Math.max(0, Math.floor(seconds));
@@ -99,7 +100,7 @@ export const MiniPlayerBar: React.FC = () => {
             accessibilityLabel={`Open ${activeStory.title}, ${narrator?.name || 'System Voice'}`}
             accessibilityHint="Opens Now Playing">
             <View style={styles.artBox}>
-              <Text style={styles.art}>{activeStory.artwork}</Text>
+              <StoryArt category={activeStory.category} emoji={activeStory.artwork} size={26} />
             </View>
             <View style={styles.textCol}>
               <Text style={styles.title} numberOfLines={1}>
@@ -249,7 +250,6 @@ const makeStyles = (colors: ThemeColors) => ({
     justifyContent: 'center' as const,
     marginRight: 10,
   },
-  art: { fontSize: 19 },
   textCol: { flex: 1, minWidth: 0 },
   title: { ...theme.typography.cardTitle, fontSize: 15, lineHeight: 20, color: colors.textDark },
   subtitle: { ...theme.typography.caption, color: colors.textMuted, marginTop: 2 },

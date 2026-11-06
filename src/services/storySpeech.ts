@@ -49,6 +49,20 @@ export const STORY_TYPES: {
 export const mapStoryTypeToCategory = (storyType: string): Category =>
   STORY_TYPES.find((type) => type.label === storyType)?.category ?? 'Adventure';
 
+// Same emoji as each category's animated icon (StoryArt), so the still fallback matches it.
+const CATEGORY_ARTWORK: Record<Category, string> = {
+  All: '📖',
+  Bedtime: '😴',
+  Funny: '😄',
+  Magical: '✨',
+  Learning: '📚',
+  Animals: '🐾',
+  Adventure: '🚀',
+};
+
+/** Emoji for a story's category: the text fallback of its animated icon. */
+export const categoryArtwork = (category: Category): string => CATEGORY_ARTWORK[category] ?? '📖';
+
 export const normalizeStory = (story: Story): Story => {
   const script = story.script || story.description || story.title;
   return {
